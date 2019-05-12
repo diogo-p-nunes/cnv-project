@@ -10,6 +10,12 @@ import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+import com.amazonaws.services.cloudwatch.AmazonCloudWatch;
+import com.amazonaws.services.cloudwatch.AmazonCloudWatchClientBuilder;
+import com.amazonaws.services.cloudwatch.model.Datapoint;
+import com.amazonaws.services.cloudwatch.model.Dimension;
+import com.amazonaws.services.cloudwatch.model.GetMetricStatisticsRequest;
+import com.amazonaws.services.cloudwatch.model.GetMetricStatisticsResult;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.ec2.model.DescribeInstancesResult;
@@ -24,6 +30,7 @@ import com.sun.net.httpserver.HttpServer;
 @SuppressWarnings("Duplicates")
 public class LoadBalancer {
     private static AmazonEC2 ec2;
+    static AmazonCloudWatch cloudWatch;
 
     private static void init() throws AmazonClientException {
         String REGION = "us-east-1";
@@ -42,6 +49,11 @@ public class LoadBalancer {
                                     .withRegion(REGION)
                                     .withCredentials(new AWSStaticCredentialsProvider(credentials))
                                     .build();
+
+        cloudWatch = AmazonCloudWatchClientBuilder.standard()
+                                                  .withRegion(REGION)
+                                                  .withCredentials(new AWSStaticCredentialsProvider(credentials))
+                                                  .build();
     }
 
     static class MyHandler implements HttpHandler {
@@ -59,6 +71,7 @@ public class LoadBalancer {
                 URL url = new URL(forwardQuery);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setDoOutput(true);
+                System.out.println("[INFO] Forwarded to " + targetIP);
 
                 // Get data from Web Server and send to client
                 int status = conn.getResponseCode();
@@ -115,20 +128,50 @@ public class LoadBalancer {
         Set<Instance> instances = null;
 
         try {
-            DescribeAvailabilityZonesResult availabilityZonesResult = ec2.describeAvailabilityZones();
-            System.out.println("You have access to " + availabilityZonesResult.getAvailabilityZones().size() + " Availability Zones.");
-
+            // GET ALL INSTANCES
             DescribeInstancesResult describeInstancesRequest = ec2.describeInstances();
             List<Reservation> reservations = describeInstancesRequest.getReservations();
             instances = new HashSet<>();
-
             for (Reservation reservation : reservations) {
                 instances.addAll(reservation.getInstances());
             }
 
+            // CLOUD WATCH OFFSET
+            long offsetInMilliseconds = 1000 * 600;
+            Dimension instanceDimension = new Dimension();
+            instanceDimension.setName("InstanceId");
+            List<Dimension> dims = new ArrayList<Dimension>();
+            dims.add(instanceDimension);
+
+
             System.out.println("You have " + instances.size() + " Amazon EC2 instance(s) running.");
-            for(Instance i : instances) {
-                System.out.println("id: " + i.getInstanceId());
+            for(Instance instance : instances) {
+                String name = instance.getInstanceId();
+                String state = instance.getState().getName();
+
+                if (state.equals("running")) {
+                    instanceDimension.setValue(name);
+
+                    GetMetricStatisticsRequest request = new GetMetricStatisticsRequest()
+                            .withStartTime(new Date(new Date().getTime() - offsetInMilliseconds))
+                            .withNamespace("AWS/EC2")
+                            .withPeriod(60)
+                            .withMetricName("CPUUtilization")
+                            .withStatistics("Average")
+                            .withDimensions(instanceDimension)
+                            .withEndTime(new Date());
+
+                    GetMetricStatisticsResult getMetricStatisticsResult = cloudWatch.getMetricStatistics(request);
+
+                    List<Datapoint> datapoints = getMetricStatisticsResult.getDatapoints();
+                    double cpuUsageAvg = 0;
+                    int count = 0;
+                    for (Datapoint dp : datapoints) {
+                        cpuUsageAvg += dp.getAverage();
+                        count++;
+                    }
+                    System.out.println("CPU AVG = Instance " + name + " : " + cpuUsageAvg);
+                }
             }
         }
         catch (AmazonServiceException ase) {

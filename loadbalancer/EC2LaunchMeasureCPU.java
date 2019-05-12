@@ -39,7 +39,7 @@ public class EC2LaunchMeasureCPU {
      *      the credentials file in your source directory.
      */
 
-    static AmazonEC2      ec2;
+    static AmazonEC2 ec2;
     static AmazonCloudWatch cloudWatch;
 
     /**
@@ -55,11 +55,6 @@ public class EC2LaunchMeasureCPU {
      */
     private static void init() throws Exception {
 
-        /*
-         * The ProfileCredentialsProvider will return your [default]
-         * credential profile by reading from the credentials file located at
-         * (~/.aws/credentials).
-         */
         AWSCredentials credentials = null;
         try {
             credentials = new ProfileCredentialsProvider().getCredentials();
