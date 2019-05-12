@@ -28,6 +28,8 @@ public class LoadBalancer {
     private static AmazonEC2 ec2;
 
     private static void init() throws AmazonClientException {
+        String REGION = "us-east-1";
+
         AWSCredentials credentials;
         try {
             credentials = new ProfileCredentialsProvider().getCredentials();
@@ -39,7 +41,7 @@ public class LoadBalancer {
                     e);
         }
         ec2 = AmazonEC2ClientBuilder.standard()
-                                    .withRegion("eu-west-1")
+                                    .withRegion(REGION)
                                     .withCredentials(new AWSStaticCredentialsProvider(credentials))
                                     .build();
     }
@@ -53,10 +55,10 @@ public class LoadBalancer {
 
             //TODO: Redirect here
             String targetIP = getTargetInstanceIP();
-            String forwardQuery = "http://" + targetIP + ":8000/climb?" + query;
+            //String forwardQuery = "http://" + targetIP + ":8000/climb?" + query;
 
-            t.getResponseHeaders().set("Location", "http://" + targetIP + ":8000");
-            t.sendResponseHeaders(200,0);
+            //t.getResponseHeaders().set("Location", "http://" + targetIP + ":8000");
+            //t.sendResponseHeaders(200,0);
         }
 
     }
@@ -72,6 +74,7 @@ public class LoadBalancer {
         /*
          * Get info about instances
          */
+        Set<Instance> instances = null;
 
         try {
             DescribeAvailabilityZonesResult availabilityZonesResult = ec2.describeAvailabilityZones();
@@ -79,7 +82,7 @@ public class LoadBalancer {
 
             DescribeInstancesResult describeInstancesRequest = ec2.describeInstances();
             List<Reservation> reservations = describeInstancesRequest.getReservations();
-            Set<Instance> instances = new HashSet<>();
+            instances = new HashSet<>();
 
             for (Reservation reservation : reservations) {
                 instances.addAll(reservation.getInstances());
@@ -89,9 +92,6 @@ public class LoadBalancer {
             for(Instance i : instances) {
                 System.out.println("id: " + i.getInstanceId());
             }
-
-            return instances;
-
         }
         catch (AmazonServiceException ase) {
             System.out.println("Caught Exception: " + ase.getMessage());
@@ -99,7 +99,8 @@ public class LoadBalancer {
             System.out.println("Error Code: " + ase.getErrorCode());
             System.out.println("Request ID: " + ase.getRequestId());
         }
-        return null;
+
+        return instances;
     }
 
     public static void main(String[] args) throws Exception {
