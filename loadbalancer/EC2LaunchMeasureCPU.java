@@ -1,3 +1,4 @@
+package loadbalancer;
 /* 2016-18 Edited by Luis Veiga and Joao Garcia */
 import java.util.HashSet;
 import java.util.List;
@@ -10,6 +11,7 @@ import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+import com.amazonaws.services.cloudwatch.model.*;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
@@ -20,11 +22,8 @@ import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.Reservation;
 import com.amazonaws.services.cloudwatch.AmazonCloudWatch;
 import com.amazonaws.services.cloudwatch.AmazonCloudWatchClientBuilder;
-import com.amazonaws.services.cloudwatch.model.Dimension;
-import com.amazonaws.services.cloudwatch.model.Datapoint;
-import com.amazonaws.services.cloudwatch.model.GetMetricStatisticsRequest;
-import com.amazonaws.services.cloudwatch.model.GetMetricStatisticsResult;
 
+@SuppressWarnings("Duplicates")
 public class EC2LaunchMeasureCPU {
 
     /*
@@ -71,53 +70,21 @@ public class EC2LaunchMeasureCPU {
                     "location (~/.aws/credentials), and is in valid format.",
                     e);
         }
-ec2 = AmazonEC2ClientBuilder.standard().withRegion("eu-west-1").withCredentials(new AWSStaticCredentialsProvider(credentials)).build();
+        ec2 = AmazonEC2ClientBuilder.standard()
+                                    .withRegion("us-east-1")
+                                    .withCredentials(new AWSStaticCredentialsProvider(credentials))
+                                    .build();
 
-cloudWatch = AmazonCloudWatchClientBuilder.standard().withRegion("eu-west-1").withCredentials(new AWSStaticCredentialsProvider(credentials)).build();
+        cloudWatch = AmazonCloudWatchClientBuilder.standard()
+                                                  .withRegion("us-east-1")
+                                                  .withCredentials(new AWSStaticCredentialsProvider(credentials))
+                                                  .build();
     }
 
 
     public static void main(String[] args) throws Exception {
-				boolean startInstance = false;
-        System.out.println("===========================================");
-        System.out.println("Welcome to the AWS Java SDK!");
-        System.out.println("===========================================");
-        if (args.length < 1) {
-					System.out.println("Missing argument <startInstance>. Exiting...");
-					System.exit(1);
-				} else {
-					if (args[0].equals("1")) {
-						startInstance = true;
-					} else if (args[0].equals("0")) {
-            startInstance = false;
-					} else {
-						System.out.println("Argument <startInstance> must be 0 or 1. Exiting...");
-					System.exit(1);
-					}
-				}
-
         init();
-
         try {
-            /* Using AWS Ireland. Pick the zone where you have AMI, key and secgroup */
-            if (startInstance) {
-            System.out.println("Starting a new instance.");
-            RunInstancesRequest runInstancesRequest =
-               new RunInstancesRequest();
-
-            runInstancesRequest.withImageId("ami-a0e9d7c6")
-                               .withInstanceType("t2.micro")
-                               .withMinCount(1)
-                               .withMaxCount(1)
-                               .withKeyName("jog-aws")
-                               .withSecurityGroups("ssh+http8000");
-							   
-            RunInstancesResult runInstancesResult =
-               ec2.runInstances(runInstancesRequest);
-			   
-            String newInstanceId = runInstancesResult.getReservation().getInstances()
-                                      .get(0).getInstanceId();
-						}
             DescribeInstancesResult describeInstancesResult = ec2.describeInstances();
             List<Reservation> reservations = describeInstancesResult.getReservations();
             Set<Instance> instances = new HashSet<Instance>();
@@ -126,41 +93,68 @@ cloudWatch = AmazonCloudWatchClientBuilder.standard().withRegion("eu-west-1").wi
             for (Reservation reservation : reservations) {
                 instances.addAll(reservation.getInstances());
             }
+
             System.out.println("total instances = " + instances.size());
             /* total observation time in milliseconds */
-            long offsetInMilliseconds = 1000 * 60 * 10;
+            long offsetInMilliseconds = 1000 * 600;
+
             Dimension instanceDimension = new Dimension();
             instanceDimension.setName("InstanceId");
             List<Dimension> dims = new ArrayList<Dimension>();
             dims.add(instanceDimension);
+
             for (Instance instance : instances) {
                 String name = instance.getInstanceId();
                 String state = instance.getState().getName();
-                if (state.equals("running")) { 
+
+                if (state.equals("running")) {
+
                     System.out.println("running instance id = " + name);
                     instanceDimension.setValue(name);
-            GetMetricStatisticsRequest request = new GetMetricStatisticsRequest()
-                    .withStartTime(new Date(new Date().getTime() - offsetInMilliseconds))
-                    .withNamespace("AWS/EC2")
-                    .withPeriod(60)
-                    .withMetricName("CPUUtilization")
-                    .withStatistics("Average")
-                    .withDimensions(instanceDimension)
-                    .withEndTime(new Date());
-                     GetMetricStatisticsResult getMetricStatisticsResult = 
-                         cloudWatch.getMetricStatistics(request);
+
+                    GetMetricStatisticsRequest request = new GetMetricStatisticsRequest()
+                            .withStartTime(new Date(new Date().getTime() - offsetInMilliseconds))
+                            .withNamespace("AWS/EC2")
+                            .withPeriod(60)
+                            .withMetricName("CPUUtilization")
+                            .withStatistics("Average")
+                            .withDimensions(instanceDimension)
+                            .withEndTime(new Date());
+
+                    GetMetricStatisticsResult getMetricStatisticsResult = cloudWatch.getMetricStatistics(request);
+
                      List<Datapoint> datapoints = getMetricStatisticsResult.getDatapoints();
                      for (Datapoint dp : datapoints) {
-                       System.out.println(" CPU utilization for instance " + name +
-                           " = " + dp.getAverage());
+                       System.out.println(" CPU utilization for instance " + name + " = " + dp.getAverage());
                      }
-                 }
-                 else {
+                }
+                else {
                     System.out.println("instance id = " + name);
-                 }
+                }
                 System.out.println("Instance State : " + state +".");
             }
-        } catch (AmazonServiceException ase) {
+
+
+            ListMetricsRequest request = new ListMetricsRequest();
+
+            boolean done = false;
+
+            while(!done) {
+                ListMetricsResult response = cloudWatch.listMetrics(request);
+
+                for(Metric metric : response.getMetrics()) {
+                    System.out.printf("Retrieved metric %s\n", metric.getMetricName());
+                }
+
+                request.setNextToken(response.getNextToken());
+
+                if(response.getNextToken() == null) {
+                    done = true;
+                }
+            }
+
+        }
+        catch (AmazonServiceException ase) {
                 System.out.println("Caught Exception: " + ase.getMessage());
                 System.out.println("Reponse Status Code: " + ase.getStatusCode());
                 System.out.println("Error Code: " + ase.getErrorCode());
