@@ -2,8 +2,6 @@ package loadbalancer;
 
 import java.io.*;
 import java.net.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.Executors;
 
@@ -53,7 +51,6 @@ public class LoadBalancer {
             final String query = t.getRequestURI().getQuery();
             System.out.println("[INFO] " + t.getRemoteAddress().toString() + " QUERY: " + query);
 
-            //TODO: Redirect here
             String targetIP = getTargetInstanceIP();
             String forwardQuery = "http://" + targetIP + ":8000/climb?" + query;
 
@@ -63,8 +60,7 @@ public class LoadBalancer {
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setDoOutput(true);
 
-                // Get data
-
+                // Get data from Web Server and send to client
                 int status = conn.getResponseCode();
                 if (status == HttpURLConnection.HTTP_OK) {
                     System.out.println("[INFO] Received answer from " + targetIP);
@@ -80,21 +76,21 @@ public class LoadBalancer {
 
                     InputStream in  = conn.getInputStream();
                     BufferedReader reader = new BufferedReader(new InputStreamReader(in));
-                    StringBuilder result = new StringBuilder();
-                    String line;
-
-                    while((line = reader.readLine()) != null) {
-                        result.append(line);
-                    }
 
                     final OutputStream lbos = t.getResponseBody();
-                    lbos.write(result.toString().getBytes());
-                    lbos.flush();
-                    lbos.close();
 
+                    byte[] b = new byte[2048];
+                    int length;
+                    while ((length = in.read(b)) != -1) {
+                        lbos.write(b, 0, length);
+                    }
+
+                    in.close();
+                    lbos.close();
                     reader.close();
 
                     System.out.println("[INFO] Sent response to " + t.getRemoteAddress().toString());
+                    System.out.println();
                 }
             }
             catch (Exception e) {
