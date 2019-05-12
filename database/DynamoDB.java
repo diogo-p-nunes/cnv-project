@@ -49,17 +49,6 @@ public class DynamoDB {
 
     static AmazonDynamoDB dynamoDB;
 
-    /**
-     * The only information needed to create a client are security credentials
-     * consisting of the AWS Access Key ID and Secret Access Key. All other
-     * configuration, such as the service endpoints, are performed
-     * automatically. Client parameters, such as proxies, can be specified in an
-     * optional ClientConfiguration object when constructing a client.
-     *
-     * @see com.amazonaws.auth.BasicAWSCredentials
-     * @see com.amazonaws.auth.ProfilesConfigFile
-     * @see com.amazonaws.ClientConfiguration
-     */
     private static void init() throws Exception {
         /*
          * The ProfileCredentialsProvider will return your [default]
