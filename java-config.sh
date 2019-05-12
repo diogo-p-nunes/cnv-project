@@ -1,0 +1,9 @@
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.7.0_80.jdk/Contents/Home/
+export JAVA_ROOT=/Library/Java/JavaVirtualMachines/jdk1.7.0_80.jdk/Contents/Home/
+export JDK_HOME=/Library/Java/JavaVirtualMachines/jdk1.7.0_80.jdk/Contents/Home/
+export JRE_HOME=/Library/Java/JavaVirtualMachines/jdk1.7.0_80.jdk/Contents/Home/jre
+export PATH=/Library/Java/JavaVirtualMachines/jdk1.7.0_80.jdk/Contents/Home//bin/:$PATH
+export SDK_HOME=/Library/Java/JavaVirtualMachines/jdk1.7.0_80.jdk/Contents/Home/
+export _JAVA_OPTIONS="-XX:-UseSplitVerifier"
+export CLASSPATH=$HOME/cnv-project
+export CLASSPATH=$CLASSPATH:$HOME/cnv-project/aws-java-sdk-1.11.550/lib/aws-java-sdk-1.11.550.jar:$HOME/cnv-project/aws-java-sdk-1.11.550/third-party/lib/*:.
