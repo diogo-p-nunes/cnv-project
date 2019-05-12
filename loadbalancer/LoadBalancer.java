@@ -1,10 +1,9 @@
 package loadbalancer;
 
 import java.io.*;
-import java.net.HttpURLConnection;
-import java.net.InetSocketAddress;
-import java.net.URL;
-import java.net.URLConnection;
+import java.net.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.Executors;
 
@@ -52,7 +51,7 @@ public class LoadBalancer {
         public void handle(final HttpExchange t) {
             // Get the query.
             final String query = t.getRequestURI().getQuery();
-            System.out.println("> Query: " + query);
+            System.out.println("[INFO] " + t.getRemoteAddress().toString() + " QUERY: " + query);
 
             //TODO: Redirect here
             String targetIP = getTargetInstanceIP();
@@ -61,19 +60,45 @@ public class LoadBalancer {
             try {
                 // Send data
                 URL url = new URL(forwardQuery);
-                URLConnection conn = url.openConnection();
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setDoOutput(true);
 
-                // Get the response
-                BufferedReader rd = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                String line;
-                while ((line = rd.readLine()) != null) {
-                    // Process line...
+                // Get data
+
+                int status = conn.getResponseCode();
+                if (status == HttpURLConnection.HTTP_OK) {
+                    System.out.println("[INFO] Received answer from " + targetIP);
+
+                    final Headers hdrs = t.getResponseHeaders();
+                    t.sendResponseHeaders(200, 0);
+
+                    hdrs.add("Content-Type", "image/png");
+                    hdrs.add("Access-Control-Allow-Origin", "*");
+                    hdrs.add("Access-Control-Allow-Credentials", "true");
+                    hdrs.add("Access-Control-Allow-Methods", "POST, GET, HEAD, OPTIONS");
+                    hdrs.add("Access-Control-Allow-Headers", "Origin, Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers");
+
+                    InputStream in  = conn.getInputStream();
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+                    StringBuilder result = new StringBuilder();
+                    String line;
+
+                    while((line = reader.readLine()) != null) {
+                        result.append(line);
+                    }
+
+                    final OutputStream lbos = t.getResponseBody();
+                    lbos.write(result.toString().getBytes());
+                    lbos.flush();
+                    lbos.close();
+
+                    reader.close();
+
+                    System.out.println("[INFO] Sent response to " + t.getRemoteAddress().toString());
                 }
-                rd.close();
             }
             catch (Exception e) {
-                System.out.println(e.getMessage());
+                e.printStackTrace();
             }
 
         }
