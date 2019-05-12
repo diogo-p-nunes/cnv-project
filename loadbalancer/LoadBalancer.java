@@ -1,10 +1,11 @@
 package loadbalancer;
 
-import java.io.IOException;
+import java.io.*;
+import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.net.URL;
+import java.net.URLConnection;
+import java.util.*;
 import java.util.concurrent.Executors;
 
 import com.amazonaws.AmazonClientException;
@@ -48,17 +49,33 @@ public class LoadBalancer {
 
     static class MyHandler implements HttpHandler {
         @Override
-        public void handle(final HttpExchange t) throws IOException {
+        public void handle(final HttpExchange t) {
             // Get the query.
             final String query = t.getRequestURI().getQuery();
             System.out.println("> Query: " + query);
 
             //TODO: Redirect here
             String targetIP = getTargetInstanceIP();
-            //String forwardQuery = "http://" + targetIP + ":8000/climb?" + query;
+            String forwardQuery = "http://" + targetIP + ":8000/climb?" + query;
 
-            //t.getResponseHeaders().set("Location", "http://" + targetIP + ":8000");
-            //t.sendResponseHeaders(200,0);
+            try {
+                // Send data
+                URL url = new URL(forwardQuery);
+                URLConnection conn = url.openConnection();
+                conn.setDoOutput(true);
+
+                // Get the response
+                BufferedReader rd = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                String line;
+                while ((line = rd.readLine()) != null) {
+                    // Process line...
+                }
+                rd.close();
+            }
+            catch (Exception e) {
+                System.out.println(e.getMessage());
+            }
+
         }
 
     }
@@ -67,7 +84,7 @@ public class LoadBalancer {
         Set<Instance> instances = getInstances();
 
         //TODO: create some algorithm to choose the right target instance
-        return instances.iterator().next().getInstanceId();
+        return instances.iterator().next().getPublicIpAddress();
     }
 
     public static Set<Instance> getInstances() {
