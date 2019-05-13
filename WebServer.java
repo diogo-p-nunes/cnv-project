@@ -23,6 +23,7 @@ import pt.ulisboa.tecnico.cnv.solver.SolverFactory;
 
 import javax.imageio.ImageIO;
 
+@SuppressWarnings("Duplicates")
 public class WebServer {
 
 	public static void main(final String[] args) throws Exception {

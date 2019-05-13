@@ -1,4 +1,4 @@
-package loadbalancer;
+package manager;
 /* 2016-18 Edited by Luis Veiga and Joao Garcia */
 import java.util.HashSet;
 import java.util.List;
