@@ -23,4 +23,18 @@ public class Request {
 
         return cost;
     }
+
+    @Override
+    public boolean equals(Object obj) {
+        if(obj == null) {
+            return false;
+        }
+        else {
+            Request other = (Request) obj;
+            return other.algorithm.equals(this.algorithm)
+                   && other.area == this.area
+                   && other.distance == this.distance
+                   && other.cost == this.cost;
+        }
+    }
 }
