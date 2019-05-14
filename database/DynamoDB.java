@@ -67,7 +67,7 @@ public class DynamoDB {
         }
         dynamoDB = AmazonDynamoDBClientBuilder.standard()
                 .withCredentials(credentialsProvider)
-                .withRegion("us-west-2")
+                .withRegion("us-east-1")
                 .build();
     }
 
@@ -75,12 +75,20 @@ public class DynamoDB {
         init();
 
         try {
-            String tableName = "my-favorite-movies-table";
+            String tableName = "metrics";
 
-            // Create a table with a primary hash key named 'name', which holds a string
+            // Read capacity - number of strongly consistent reads per second or two eventually consistent reads per second.
+            // 1L - we specified that we need 1 strongly consistent reads per second (or 2 eventually consistent reads).
+
+            // Write capacity - number of 1KB writes per second. Packages of data that are smaller than 1KB are rounded up,
+            // hence writing only 500 bytes is counted as a 1KB write.
+            // 1L - we tell DynamoDB to scale the system such that we can write up to 1 times per second about 1KB of data.
+
+            // Create a table with a primary hash key named 'description', which holds a string
+
             CreateTableRequest createTableRequest = new CreateTableRequest().withTableName(tableName)
-                    .withKeySchema(new KeySchemaElement().withAttributeName("name").withKeyType(KeyType.HASH))
-                    .withAttributeDefinitions(new AttributeDefinition().withAttributeName("name").withAttributeType(ScalarAttributeType.S))
+                    .withKeySchema(new KeySchemaElement().withAttributeName("description").withKeyType(KeyType.HASH))
+                    .withAttributeDefinitions(new AttributeDefinition().withAttributeName("description").withAttributeType(ScalarAttributeType.S))
                     .withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(1L).withWriteCapacityUnits(1L));
 
             // Create table if it does not exist yet
@@ -93,27 +101,7 @@ public class DynamoDB {
             TableDescription tableDescription = dynamoDB.describeTable(describeTableRequest).getTable();
             System.out.println("Table Description: " + tableDescription);
 
-            // Add an item
-            Map<String, AttributeValue> item = newItem("Bill & Ted's Excellent Adventure", 1989, "****", "James", "Sara");
-            PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
-            PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
-            System.out.println("Result: " + putItemResult);
-
-            // Add another item
-            item = newItem("Airplane", 1980, "*****", "James", "Billy Bob");
-            putItemRequest = new PutItemRequest(tableName, item);
-            putItemResult = dynamoDB.putItem(putItemRequest);
-            System.out.println("Result: " + putItemResult);
-
-            // Scan items for movies with a year attribute greater than 1985
-            HashMap<String, Condition> scanFilter = new HashMap<String, Condition>();
-            Condition condition = new Condition()
-                    .withComparisonOperator(ComparisonOperator.GT.toString())
-                    .withAttributeValueList(new AttributeValue().withN("1985"));
-            scanFilter.put("year", condition);
-            ScanRequest scanRequest = new ScanRequest(tableName).withScanFilter(scanFilter);
-            ScanResult scanResult = dynamoDB.scan(scanRequest);
-            System.out.println("Result: " + scanResult);
+            // addItem(tableName, "DFS|1048576|544.7531551078893=3579442.0", "DFS", 1048576, 544.7531551078893, 3579442.0);
 
         } catch (AmazonServiceException ase) {
             System.out.println("Caught an AmazonServiceException, which means your request made it "
@@ -131,14 +119,35 @@ public class DynamoDB {
         }
     }
 
-    private static Map<String, AttributeValue> newItem(String name, int year, String rating, String... fans) {
+    public static Map<String, AttributeValue> newItem(String description, String algorithm, int pixelsSearchArea, double distFromStartToEnd, double metricResult) {
         Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
-        item.put("name", new AttributeValue(name));
-        item.put("year", new AttributeValue().withN(Integer.toString(year)));
-        item.put("rating", new AttributeValue(rating));
-        item.put("fans", new AttributeValue().withSS(fans));
+        item.put("description", new AttributeValue(description));
+        item.put("algorithm", new AttributeValue(algorithm));
+        item.put("pixelsSearchArea", new AttributeValue().withN(Integer.toString(pixelsSearchArea)));
+        item.put("distFromStartToEnd", new AttributeValue().withN(Double.toString(distFromStartToEnd)));
+        item.put("metricResult", new AttributeValue().withN(Double.toString(metricResult)));
 
         return item;
     }
 
+    public static void addItem(String tableName, String description, String algorithm, int pixelsSearchArea, double distFromStartToEnd, double metricResult){
+
+        // Add an item
+        Map<String, AttributeValue> item = newItem(description, algorithm, pixelsSearchArea, distFromStartToEnd, metricResult);
+        PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
+        PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
+        System.out.println("Result: " + putItemResult);
+
+//        // Scan items for movies with a year attribute greater than 1985
+//        HashMap<String, Condition> scanFilter = new HashMap<String, Condition>();
+//        Condition condition = new Condition()
+//            .withComparisonOperator(ComparisonOperator.GT.toString())
+//            .withAttributeValueList(new AttributeValue().withN("1985"));
+//        scanFilter.put("year", condition);
+//        ScanRequest scanRequest = new ScanRequest(tableName).withScanFilter(scanFilter);
+//        ScanResult scanResult = dynamoDB.scan(scanRequest);
+//        System.out.println("Result: " + scanResult);
+
+        return;
+    }
 }
