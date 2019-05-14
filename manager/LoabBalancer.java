@@ -14,6 +14,7 @@ import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executors;
 
@@ -63,8 +64,25 @@ public class LoabBalancer {
     }
 
     private static String getTargetInstanceIP(double cost, String except) {
-        //TODO: Algorithm to determine target Web Server
-        return Manager.wsRequests.keySet().iterator().next();
+        // Determine supposed capacity of each instance if it were to run this request
+        Map<String,Double> capacities = new HashMap<>();
+        for(String ip : Manager.wsRequests.keySet()) {
+            double capacity = Manager.getWSTotalLoad(ip);
+            capacities.put(ip, capacity+cost);
+        }
+
+        // Return the instance that maximizes the capacity without going over the limit
+        double max = capacities.values().iterator().next();
+        String ip_max = capacities.keySet().iterator().next();
+        for(String ip : capacities.keySet()) {
+            double cap = capacities.get(ip);
+            if(cap <= Manager.MAX_CAPACITY && cap >= max) {
+                max = cap;
+                ip_max = ip;
+            }
+        }
+
+        return ip_max;
     }
 
     static class MyHandler implements HttpHandler {

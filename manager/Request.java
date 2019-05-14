@@ -18,7 +18,7 @@ public class Request {
     public static double requestCostEstimation(Request request) {
         //TODO: Estimation of the cost of a given request
         // must be based on the metrics extracted - DYNAMO
-        double cost = 0.0;
+        double cost = 0.3;
         request.cost = cost;
 
         return cost;
