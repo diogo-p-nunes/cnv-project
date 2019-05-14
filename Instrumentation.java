@@ -7,6 +7,7 @@ import java.util.Vector;
 
 import com.amazonaws.services.dynamodbv2.model.*;
 import database.DynamoDB;
+
 import java.io.FileWriter;
 import java.io.BufferedWriter;
 import java.util.HashMap;
