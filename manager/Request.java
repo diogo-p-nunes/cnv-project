@@ -21,9 +21,16 @@ public class Request {
         //TODO: Estimation of the cost of a given request
         // must be based on the metrics extracted - DYNAMO
 
-        DynamoDB.getItems(r.algorithm, r.area, r.distance).toString();
+        /*ScanRequest scanResquet = DynamoDB.getItems(r.algorithm, r.area, r.distance);
+        double similarMetric = 0;
 
-        // determine cost here
+        for (Map<String, AttributeValue> item : scanResquet.getItems()){
+            similarMetric += item.get("metricResult");
+        }
+        similarMetric /= scanResquet.getItems().size();*/
+
+        //in need of information such as CPU usage, etc; to estimate cost
+
         double cost = 0.3;
         r.cost = cost;
 
