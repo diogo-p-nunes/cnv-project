@@ -17,6 +17,7 @@ import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import database.DynamoDB;
 import pt.ulisboa.tecnico.cnv.solver.Solver;
 import pt.ulisboa.tecnico.cnv.solver.SolverArgumentParser;
 import pt.ulisboa.tecnico.cnv.solver.SolverFactory;
@@ -25,14 +26,14 @@ import javax.imageio.ImageIO;
 
 @SuppressWarnings("Duplicates")
 public class WebServer {
+	public static DynamoDB database;
 
 	public static void main(final String[] args) throws Exception {
 
-		//final HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 8000), 0);
+		database = new DynamoDB();
 
 		final HttpServer server = HttpServer.create(new InetSocketAddress(8000), 0);
 		server.createContext("/climb", new MyHandler());
-		// be aware! infinite pool of threads!
 		server.setExecutor(Executors.newCachedThreadPool());
 		server.start();
 
@@ -51,23 +52,12 @@ public class WebServer {
 			// Break it down into String[].
 			final String[] params = query.split("&");
 
-			/*
-			for(String p: params) {
-				System.out.println(p);
-			}
-			*/
-
 			// Store as if it was a direct call to SolverMain.
 			final ArrayList<String> newArgs = new ArrayList<>();
 			for (final String p : params) {
 				final String[] splitParam = p.split("=");
 				newArgs.add("-" + splitParam[0]);
 				newArgs.add(splitParam[1]);
-
-				/*
-				System.out.println("splitParam[0]: " + splitParam[0]);
-				System.out.println("splitParam[1]: " + splitParam[1]);
-				*/
 			}
 
 			newArgs.add("-d");
@@ -79,11 +69,6 @@ public class WebServer {
 				args[i] = arg;
 				i++;
 			}
-
-			/*
-			for(String ar : args) {
-				System.out.println("ar: " + ar);
-			} */
 
 			SolverArgumentParser ap = null;
 			try {
@@ -122,11 +107,7 @@ public class WebServer {
 
 				responseFile = imagePathPNG.toFile();
 
-			} catch (final FileNotFoundException e) {
-				e.printStackTrace();
-			} catch (final IOException e) {
-				e.printStackTrace();
-			} catch (ClassNotFoundException e) {
+			} catch (final Exception e) {
 				e.printStackTrace();
 			}
 
@@ -139,7 +120,7 @@ public class WebServer {
 			// So we have to write the metrics to a file and then reset them
 			// for the next request this thread might execute.
 			String requestToString = requestToString(ap, s);
-			Instrumentation.writeMetricsToFile(requestToString);
+			Instrumentation.writeMetricsToDynamoDB(requestToString);
 
 			// Send response to browser.
 			final Headers hdrs = t.getResponseHeaders();
@@ -168,8 +149,8 @@ public class WebServer {
 		String area = "" + ap.getX1() * ap.getY1();
 
 		// distancia
-		String dist = "" + Math.sqrt(Math.pow(ap.getStartX() - s.getTargetX(), 2)
-				 	     + Math.pow(ap.getStartY() - s.getTargetY(), 2) );
+		String dist = "" + Math.sqrt(Math.pow(ap.getStartX() - ap.getX1(), 2)
+				 	     + Math.pow(ap.getStartY() - ap.getY1(), 2) );
 
 		return alg + "|" + area + "|" + dist;
 	}

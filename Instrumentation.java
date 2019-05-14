@@ -3,11 +3,8 @@
 import BIT.highBIT.*;
 import java.io.File;
 import java.util.Enumeration;
-import java.util.Vector;
 
-import com.amazonaws.services.dynamodbv2.model.*;
 import database.DynamoDB;
-
 import java.io.FileWriter;
 import java.io.BufferedWriter;
 import java.util.HashMap;
@@ -15,29 +12,8 @@ import java.util.Map;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-import com.amazonaws.regions.Region;
-import com.amazonaws.regions.Regions;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
-import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
-import com.amazonaws.services.dynamodbv2.model.AttributeValue;
-import com.amazonaws.services.dynamodbv2.model.ComparisonOperator;
-import com.amazonaws.services.dynamodbv2.model.Condition;
-import com.amazonaws.services.dynamodbv2.model.CreateTableRequest;
-import com.amazonaws.services.dynamodbv2.model.DescribeTableRequest;
-import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
-import com.amazonaws.services.dynamodbv2.model.KeyType;
-import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughput;
-import com.amazonaws.services.dynamodbv2.model.PutItemRequest;
-import com.amazonaws.services.dynamodbv2.model.PutItemResult;
-import com.amazonaws.services.dynamodbv2.model.ScalarAttributeType;
-import com.amazonaws.services.dynamodbv2.model.ScanRequest;
-import com.amazonaws.services.dynamodbv2.model.ScanResult;
-import com.amazonaws.services.dynamodbv2.model.TableDescription;
-import com.amazonaws.services.dynamodbv2.util.TableUtils;
 
+@SuppressWarnings("Duplicates")
 public class Instrumentation {
 
     // an hashmap with metrics for each thread, by thread ID
@@ -73,32 +49,29 @@ public class Instrumentation {
 
             // close file and return
             outputMetrics.close();
-            return;
         }
         catch (Exception e) {
             System.out.println("> [BIT] EXCEPTION: " + e.getMessage());
         }
     }
 
-    public static synchronized  void writeMetricsToDynamoDB(String request) {
+    public static synchronized void writeMetricsToDynamoDB(String request) {
 
         Metric metric = getMetricByThread();
-        BufferedWriter outputMetrics = null;
-
-        String description = request + "=" + metric.toString();
         String[] descriptionParts = request.split("\\|");
+
         String algorithm = descriptionParts[0];
-        int pixelsSearchArea = Integer.parseInt(descriptionParts[1]);
+        long pixelsSearchArea = Long.parseLong(descriptionParts[1]);
         double distFromStartToEnd = Double.parseDouble(descriptionParts[2]);;
         double metricResult = Double.parseDouble(metric.toString());
 
         try {
-            DynamoDB.addItem("metrics", description, algorithm, pixelsSearchArea, distFromStartToEnd, metricResult);
-            return;
+            DynamoDB.addItem(DynamoDB.TABLE_METRICS, algorithm, pixelsSearchArea, distFromStartToEnd, metricResult);
+            System.out.println("> [BIT]: Stored metrics (of T" + Thread.currentThread().getId() + ") in database.");
         }
         catch (AmazonServiceException ase) {
             System.out.println("Caught an AmazonServiceException, which means your request made it "
-                    + "to AWS, but was rejected with an error response for some reason.");
+                                + "to AWS, but was rejected with an error response for some reason.");
             System.out.println("Error Message:    " + ase.getMessage());
             System.out.println("HTTP Status Code: " + ase.getStatusCode());
             System.out.println("AWS Error Code:   " + ase.getErrorCode());
@@ -107,9 +80,12 @@ public class Instrumentation {
         }
         catch (AmazonClientException ace) {
             System.out.println("Caught an AmazonClientException, which means the client encountered "
-                    + "a serious internal problem while trying to communicate with AWS, "
-                    + "such as not being able to access the network.");
+                                + "a serious internal problem while trying to communicate with AWS, "
+                                + "such as not being able to access the network.");
             System.out.println("Error Message: " + ace.getMessage());
+        }
+        catch (Exception e) {
+            e.printStackTrace();
         }
     }
 

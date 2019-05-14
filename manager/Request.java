@@ -1,5 +1,7 @@
 package manager;
 
+import database.DynamoDB;
+
 public class Request {
     public String algorithm;
     public long area;
@@ -15,11 +17,15 @@ public class Request {
         this.distance = distance;
     }
 
-    public static double requestCostEstimation(Request request) {
+    public static double requestCostEstimation(Request r) {
         //TODO: Estimation of the cost of a given request
         // must be based on the metrics extracted - DYNAMO
+
+        DynamoDB.getItems(r.algorithm, r.area, r.distance).toString();
+
+        // determine cost here
         double cost = 0.3;
-        request.cost = cost;
+        r.cost = cost;
 
         return cost;
     }

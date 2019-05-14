@@ -9,11 +9,13 @@ import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
+import database.DynamoDB;
 
 @SuppressWarnings("Duplicates")
 public class Manager {
     static AmazonEC2 ec2;
-    static String REGION = "us-east-1";
+    static DynamoDB database;
+    public static String REGION = "us-east-1";
     static int MIN_INSTANCES = 2;
     static double MAX_CAPACITY = 0.95;
     static double MAX_SYSTEM_LOAD = 0.5;
@@ -81,8 +83,9 @@ public class Manager {
     }
 
     public static void main(String[] args) throws Exception {
-        System.out.println("[INFO] LB and AS initialization ... ");
+        System.out.println("[INFO] DB, LB and AS initialization ... ");
         init();
+        database = new DynamoDB();
         autoScaler = new AutoScaler();
         loadBalancer = new LoabBalancer();
         System.out.println("[INFO] Complete.");
