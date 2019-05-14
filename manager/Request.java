@@ -7,6 +7,7 @@ public class Request {
     public long area;
     public double distance;
     public double cost;
+    static double MAX_METRIC_VALUE = 10000000;
 
     public Request(String algorithm, long area, double distance) {
         this.algorithm = algorithm;
@@ -27,9 +28,11 @@ public class Request {
         for (Map<String, AttributeValue> item : scanResquet.getItems()){
             similarMetric += item.get("metricResult");
         }
-        similarMetric /= scanResquet.getItems().size();*/
+        similarMetric /= scanResquet.getItems().size();
 
-        //in need of information such as CPU usage, etc; to estimate cost
+        double cost = similarMetric /= MAX_METRIC_VALUE;*/
+
+
 
         double cost = 0.3;
         r.cost = cost;
