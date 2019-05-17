@@ -5,10 +5,7 @@ import java.util.Map;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
-import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-import com.amazonaws.regions.Region;
-import com.amazonaws.regions.Regions;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
@@ -16,7 +13,6 @@ import com.amazonaws.services.dynamodbv2.model.AttributeValue;
 import com.amazonaws.services.dynamodbv2.model.ComparisonOperator;
 import com.amazonaws.services.dynamodbv2.model.Condition;
 import com.amazonaws.services.dynamodbv2.model.CreateTableRequest;
-import com.amazonaws.services.dynamodbv2.model.DescribeTableRequest;
 import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
 import com.amazonaws.services.dynamodbv2.model.KeyType;
 import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughput;
@@ -25,7 +21,6 @@ import com.amazonaws.services.dynamodbv2.model.PutItemResult;
 import com.amazonaws.services.dynamodbv2.model.ScalarAttributeType;
 import com.amazonaws.services.dynamodbv2.model.ScanRequest;
 import com.amazonaws.services.dynamodbv2.model.ScanResult;
-import com.amazonaws.services.dynamodbv2.model.TableDescription;
 import com.amazonaws.services.dynamodbv2.util.TableUtils;
 import manager.Manager;
 
@@ -128,19 +123,18 @@ public class DynamoDB {
 
         // First check if there is an equal request exactly
         String description = algorithm + "|" + pixelsSearchArea + "|" + distFromStartToEnd;
-        System.out.println("DESCRIPTION: " + description);
         Condition eq_request = new Condition().withComparisonOperator(ComparisonOperator.EQ.toString())
                                               .withAttributeValueList(new AttributeValue(description));
         scanFilter.put("description", eq_request);
         scanRequest = new ScanRequest(TABLE_METRICS).withScanFilter(scanFilter);
         scanResult = dynamoDB.scan(scanRequest);
         if(scanResult.getItems().size() != 0) {
-            System.out.println("[DB] Found exact same request.");
+            //System.out.println("[DB] Found exact same request.");
             return scanResult;
         }
 
         // Scan items with the same algorithm
-        System.out.println("[DB] Getting similar requests.");
+        //System.out.println("[DB] Getting similar requests.");
         scanFilter = new HashMap<String, Condition>();
         Condition eq_algorithm = new Condition().withComparisonOperator(ComparisonOperator.EQ.toString())
                                                 .withAttributeValueList(new AttributeValue(algorithm));
@@ -161,7 +155,7 @@ public class DynamoDB {
 
         scanRequest = new ScanRequest(TABLE_METRICS).withScanFilter(scanFilter);
         scanResult = dynamoDB.scan(scanRequest);
-        System.out.println("[DB] Query results: " + scanResult.toString());
+        //System.out.println("[DB] Query results: " + scanResult.toString());
         return scanResult;
     }
 }

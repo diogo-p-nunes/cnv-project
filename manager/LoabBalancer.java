@@ -76,7 +76,7 @@ public class LoabBalancer {
         String ip_max = capacities.keySet().iterator().next();
         for(String ip : capacities.keySet()) {
             double cap = capacities.get(ip);
-            if(cap <= Manager.MAX_CAPACITY && cap >= max) {
+            if(cap <= Manager.MAX_CAPACITY && cap >= max && !ip.equals(except)) {
                 max = cap;
                 ip_max = ip;
             }
@@ -97,7 +97,7 @@ public class LoabBalancer {
             double cost = Request.requestCostEstimation(request);
 
             // Get the target VM based on cost and workload
-            String targetIP = getTargetInstanceIP(cost, null);
+            String targetIP = getTargetInstanceIP(cost, "");
             boolean done = false;
 
             while(!done) {
@@ -144,16 +144,16 @@ public class LoabBalancer {
                         System.out.println("[LB] Sent response back to " + t.getRemoteAddress().toString() + "\n");
 
                         // This VM has finished this request
-                        Manager.removeWSRequest(targetIP, request);
+                        Manager.removeSuccessfulWSRequest(targetIP, request);
                         done = true;
                     }
                 }
                 catch (Exception e) {
-                    System.out.println("[LB] WebServer " + t.getRemoteAddress().toString() + " failed.");
+                    System.out.println("[LB] Instance at " + targetIP + " failed.");
                     System.out.println("[LB] Trying with different WebServer.");
 
                     // This VM is no longer running this request due to failure
-                    Manager.removeWSRequest(targetIP, request);
+                    Manager.removeFailedWSRequest(targetIP, request);
 
                     // Get the target VM based on cost and workload except the one that failed
                     targetIP = getTargetInstanceIP(cost, targetIP);

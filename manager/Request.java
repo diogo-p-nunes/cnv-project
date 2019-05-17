@@ -23,8 +23,6 @@ public class Request {
     }
 
     public static double requestCostEstimation(Request r) {
-        //TODO: Estimation of the cost of a given request
-        // must be based on the metrics extracted - DYNAMO
 
         /*
          * Temos de pensar da seguinte forma:
@@ -36,16 +34,22 @@ public class Request {
 
         ScanResult result = DynamoDB.getItems(r.algorithm, r.area, r.distance);
         double similarMetric = 0;
+        double cost;
 
         for (Map<String, AttributeValue> item : result.getItems()){
             similarMetric += Double.parseDouble(item.get("metricResult").getN());
         }
-        similarMetric /= result.getItems().size();
 
-        double cost = similarMetric / MAX_METRIC_VALUE;
+        if(result.getItems().size() != 0) {
+            similarMetric /= result.getItems().size();
+            cost = similarMetric / MAX_METRIC_VALUE;
+        }
+        else {
+            cost = 0.3;
+        }
 
         r.cost = cost;
-        System.out.println("[REQUEST] " + r.toString() + " COST: " + cost);
+        System.out.println("[REQUEST] " + r.toString() + " - COST: " + cost);
         return cost;
     }
 

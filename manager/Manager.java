@@ -14,12 +14,13 @@ import database.DynamoDB;
 @SuppressWarnings("Duplicates")
 public class Manager {
     static AmazonEC2 ec2;
+    private static AutoScaler autoScaler;
     public static String REGION = "us-east-1";
     static int MIN_INSTANCES = 2;
     static double MAX_CAPACITY = 1;
     static double MAX_SYSTEM_LOAD = 0.8;
     static double MIN_SYSTEM_LOAD = 0.4;
-    private static int SYSTEM_HEALTH_CHECK_TIME = 10; //in seconds
+    private static int SYSTEM_HEALTH_CHECK_TIME = 30; //in seconds
     private static Map<String, RunningInstance> wsRequests = new ConcurrentHashMap<>();
 
     private static void init() throws AmazonClientException {
@@ -44,8 +45,18 @@ public class Manager {
         wsRequests.get(ip).addRequest(r);
     }
 
-    public static synchronized void removeWSRequest(String ip, Request r) {
+    private static synchronized void removeWSRequest(String ip, Request r) {
         wsRequests.get(ip).removeRequest(r);
+    }
+
+    public static void removeSuccessfulWSRequest(String ip, Request request) {
+        removeWSRequest(ip, request);
+        wsRequests.get(ip).incrementPerformedRequests();
+    }
+
+    public static void removeFailedWSRequest(String ip, Request request) {
+        removeWSRequest(ip, request);
+        wsRequests.get(ip).incrementFailedRequests();
     }
 
     public static synchronized void addWS(String ip, String id) {
@@ -59,6 +70,10 @@ public class Manager {
         return id;
     }
 
+    public static Collection<RunningInstance> getRunningInstances() {
+        return wsRequests.values();
+    }
+
     public static double getWSTotalLoad(String ip) {
         return wsRequests.get(ip).getTotalLoad();
     }
@@ -69,6 +84,10 @@ public class Manager {
             totalLoad += Manager.getWSTotalLoad(ip);
         }
         return totalLoad;
+    }
+
+    public static double getSystemMaxCapacity() {
+        return getNumberOfInstances() * MAX_CAPACITY;
     }
 
     public static int getNumberOfInstances() {
@@ -84,14 +103,17 @@ public class Manager {
     }
 
     private static void printSystemReport() {
-        // Print the system report
+        // Print the system report - each instance state and running requests
         System.out.println();
+        System.out.println("-----------------------------------------------------------------------------------------");
+        System.out.printf(" N-INSTANCES: %d\t\t   SYS-LOAD: %.2f%%\n",
+                getNumberOfInstances(), getSystemTotalLoad()/getSystemMaxCapacity() * 100);
         System.out.println("-----------------------------------------------------------------------------------------");
         System.out.printf("%9s %26s %20s %10s %20s\n", "INSTANCE", "PUBLIC IP", "RUNNING REQS", "LOAD", "AVAILABILITY");
         System.out.println("-----------------------------------------------------------------------------------------");
 
         for(RunningInstance ws : wsRequests.values()) {
-            System.out.format("%20s %20s %4d %21.2f%% %13.2f%%\n",
+            System.out.format("%20s %19s %5d %21.2f%% %13.2f%%\n",
                     ws.getId(), ws.getIp(), ws.getRequests().size(), (ws.getTotalLoad()/1)*100, ws.getAvailability()*100);
         }
         System.out.println("-----------------------------------------------------------------------------------------");
@@ -107,7 +129,7 @@ public class Manager {
         System.out.println("[INFO] DB, LB and AS initialization ... ");
         init();
         DynamoDB database = new DynamoDB();
-        AutoScaler autoScaler = new AutoScaler();
+        autoScaler = new AutoScaler();
         LoabBalancer loadBalancer = new LoabBalancer();
         System.out.println("[INFO] Initialization complete.");
         System.out.println("[LB] Listening on " + loadBalancer.getAddress().toString());
@@ -118,12 +140,12 @@ public class Manager {
          * It is also important to check if an instance is continuously failing
          * to answer to requests - if so, it has to be terminated.
          */
-        int printReport = 0;
+        long printReport = 0;
         while(true) {
             Thread.sleep(SYSTEM_HEALTH_CHECK_TIME * 1000);
             autoScaler.performSystemHealthCheck();
 
-            if(printReport % 2 == 0) {
+            if(printReport % 5 == 0) {
                 printSystemReport();
             }
             printReport++;

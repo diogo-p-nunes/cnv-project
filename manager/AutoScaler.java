@@ -76,12 +76,17 @@ public class AutoScaler {
             // check if the newly created instance is running or not
             done_init = true;
             for( Instance instance : instances) {
-                if(!newInstances.contains(instance)) continue;
-                if(instance.getState().getName().equals("running")) {
-                    Manager.addWS(instance.getPublicIpAddress(), instance.getInstanceId());
-                    System.out.println("[AS] Instance: " + instance.getInstanceId() + " added and ready for LB");
+                boolean isNewInstance = false;
+                for(Instance newInst : newInstances) {
+                    if(instance.getInstanceId().equals(newInst.getInstanceId())) {
+                        isNewInstance = true;
+                    }
                 }
-                else {
+                if(isNewInstance && instance.getState().getName().equals("running")) {
+                    Manager.addWS(instance.getPublicIpAddress(), instance.getInstanceId());
+                    System.out.println("[AS] Instance: " + instance.getInstanceId() + " is ready.");
+                }
+                else if (isNewInstance){
                     done_init = false;
                     System.out.println("[AS] Instance: " + instance.getInstanceId() + " " + instance.getState().getName() + ".");
                 }
@@ -97,21 +102,6 @@ public class AutoScaler {
         Manager.ec2.terminateInstances(termInstanceReq);
     }
 
-    public void removeInstances() {
-        while (getSystemPercentLoad() < Manager.MIN_SYSTEM_LOAD
-                && Manager.getNumberOfInstances() > Manager.MIN_INSTANCES) {
-
-            for(String ip : Manager.getAllInstancesIp()) {
-                //if not running any request
-                if(Manager.getInstanceNumberOfRunningRequests(ip) == 0) {
-                    String id = Manager.removeWS(ip);
-                    terminateInstance(id);
-                    break;
-                }
-            }
-        }
-    }
-
     public double getSystemPercentLoad() {
         double totalLoad = Manager.getSystemTotalLoad();
         double maxLoad = Manager.MAX_CAPACITY * Manager.getNumberOfInstances();
@@ -125,15 +115,24 @@ public class AutoScaler {
     }
 
     public void performSystemHealthCheck() throws InterruptedException {
+        for(RunningInstance i : Manager.getRunningInstances()) {
+            // Terminate ill instances - PRIORITY
+            if(i.getHealthState().equals("unhealthy")) {
+                terminateInstance(i.getId());
+            }
+            // Terminate unnecessary instances
+            else if(i.isUnnecessary()) {
+                terminateInstance(i.getId());
+            }
+        }
+
+        // CAREFUL - Terminating ill instances on the loop above
+        // may lead to an apparent increase on system load!
+        // Never let system get too much load
         double systemLoad = getSystemPercentLoad();
-        System.out.printf("[INFO] System load: %.2f%%\n", systemLoad*100);
         if(systemLoad > Manager.MAX_SYSTEM_LOAD) {
             int amount = calculateAmountOfNeededInstances();
             createInstances(amount);
-        }
-        else if(systemLoad < Manager.MIN_SYSTEM_LOAD
-                && Manager.getNumberOfInstances() > Manager.MIN_INSTANCES) {
-            removeInstances();
         }
     }
 }

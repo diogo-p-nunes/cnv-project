@@ -17,6 +17,8 @@ public class RunningInstance {
     private List<Request> requests = new ArrayList<Request>();
     private long failedRequests = 0;
     private long performedRequests = 0;
+    private long consecutiveFailedRequests = 0;
+    private long consecutiveTimesUnnecessary = 0;
 
     public RunningInstance(String ip, String id) {
         this.ip = ip;
@@ -37,10 +39,13 @@ public class RunningInstance {
 
     public void incrementFailedRequests() {
         failedRequests++;
+        consecutiveFailedRequests++;
     }
 
     public void incrementPerformedRequests() {
         performedRequests++;
+        consecutiveFailedRequests = 0;
+        consecutiveTimesUnnecessary = 0;
     }
 
     public void removeRequest(Request r) {
@@ -70,5 +75,31 @@ public class RunningInstance {
     public double getAvailability() {
         if((getPerformedRequests() + getFailedRequests()) == 0) return 1;
         return ((double) getPerformedRequests()) / (getPerformedRequests() + getFailedRequests());
+    }
+
+    public String getHealthState() {
+        if(consecutiveFailedRequests >= 3) {
+            return "unhealthy";
+        }
+        else {
+            return "healthy";
+        }
+    }
+
+    public boolean isUnnecessary() {
+        /*
+         * Each system health check performed by the autoscaler
+         * increments the "unnecessary" mark. This mark is only
+         * reset when this instance performs a request successfully.
+         * Therefore, if it never performs requests it will endlessly increment
+         * the mark and will eventually be classified as unnecessary and terminated.
+         */
+        if(consecutiveTimesUnnecessary >= 3) {
+            return true;
+        }
+        else {
+            consecutiveTimesUnnecessary++;
+            return false;
+        }
     }
 }
