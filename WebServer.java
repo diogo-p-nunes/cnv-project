@@ -2,7 +2,6 @@
 
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -10,7 +9,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.concurrent.Executors;
 
 import com.sun.net.httpserver.Headers;
@@ -119,7 +117,7 @@ public class WebServer {
 			// This is the end of the execution of the request
 			// So we have to write the metrics to a file and then reset them
 			// for the next request this thread might execute.
-			String requestToString = requestToString(ap, s);
+			String requestToString = requestToString(ap);
 			Instrumentation.writeMetricsToDynamoDB(requestToString);
 
 			// Send response to browser.
@@ -141,7 +139,7 @@ public class WebServer {
 		}
 	}
 
-	static String requestToString(SolverArgumentParser ap, Solver s) {
+	static String requestToString(SolverArgumentParser ap) {
 		// algoritmo
 		String alg = ap.getSolverStrategy().toString();
 		

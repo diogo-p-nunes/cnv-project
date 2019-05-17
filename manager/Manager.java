@@ -14,18 +14,13 @@ import database.DynamoDB;
 @SuppressWarnings("Duplicates")
 public class Manager {
     static AmazonEC2 ec2;
-    static DynamoDB database;
     public static String REGION = "us-east-1";
     static int MIN_INSTANCES = 2;
-    static double MAX_CAPACITY = 0.95;
-    static double MAX_SYSTEM_LOAD = 0.5;
+    static double MAX_CAPACITY = 1;
+    static double MAX_SYSTEM_LOAD = 0.8;
     static double MIN_SYSTEM_LOAD = 0.4;
-    static int SYSTEM_HEALTH_CHECK_TIME = 30; //in seconds
-    static Map<String, List<Request>> wsRequests = new ConcurrentHashMap<>();
-    static Map<String, String> wsIpId = new ConcurrentHashMap<>();
-
-    private static LoabBalancer loadBalancer;
-    private static AutoScaler autoScaler;
+    private static int SYSTEM_HEALTH_CHECK_TIME = 10; //in seconds
+    private static Map<String, RunningInstance> wsRequests = new ConcurrentHashMap<>();
 
     private static void init() throws AmazonClientException {
         AWSCredentials credentials;
@@ -46,32 +41,26 @@ public class Manager {
     }
 
     public static synchronized void addWSRequest(String ip, Request r) {
-        wsRequests.get(ip).add(r);
+        wsRequests.get(ip).addRequest(r);
     }
 
     public static synchronized void removeWSRequest(String ip, Request r) {
-        wsRequests.get(ip).remove(r);
+        wsRequests.get(ip).removeRequest(r);
     }
 
     public static synchronized void addWS(String ip, String id) {
         if(wsRequests.containsKey(ip)) return;
-        wsRequests.put(ip, new ArrayList<Request>());
-        wsIpId.put(ip, id);
+        wsRequests.put(ip, new RunningInstance(ip, id));
     }
 
     public static synchronized String removeWS(String ip) {
+        String id = wsRequests.get(ip).getId();
         wsRequests.remove(ip);
-        String id = wsIpId.get(ip);
-        wsIpId.remove(ip);
         return id;
     }
 
     public static double getWSTotalLoad(String ip) {
-        double totalLoad = 0.0;
-        for(Request r : wsRequests.get(ip)) {
-            totalLoad += r.cost;
-        }
-        return totalLoad;
+        return wsRequests.get(ip).getTotalLoad();
     }
 
     public static double getSystemTotalLoad() {
@@ -82,26 +71,62 @@ public class Manager {
         return totalLoad;
     }
 
+    public static int getNumberOfInstances() {
+        return wsRequests.size();
+    }
+
+    public static Set<String> getAllInstancesIp() {
+        return wsRequests.keySet();
+    }
+
+    public static int getInstanceNumberOfRunningRequests(String ip) {
+        return wsRequests.get(ip).getRequests().size();
+    }
+
+    private static void printSystemReport() {
+        // Print the system report
+        System.out.println();
+        System.out.println("-----------------------------------------------------------------------------------------");
+        System.out.printf("%9s %26s %20s %10s %20s\n", "INSTANCE", "PUBLIC IP", "RUNNING REQS", "LOAD", "AVAILABILITY");
+        System.out.println("-----------------------------------------------------------------------------------------");
+
+        for(RunningInstance ws : wsRequests.values()) {
+            System.out.format("%20s %20s %4d %21.2f%% %13.2f%%\n",
+                    ws.getId(), ws.getIp(), ws.getRequests().size(), (ws.getTotalLoad()/1)*100, ws.getAvailability()*100);
+        }
+        System.out.println("-----------------------------------------------------------------------------------------");
+        System.out.println();
+    }
+
     public static void main(String[] args) throws Exception {
+        /*
+         * Launch the whole system in this specified order.
+         * Only then is it ready to accept requests.
+         */
+
         System.out.println("[INFO] DB, LB and AS initialization ... ");
         init();
-        database = new DynamoDB();
-        autoScaler = new AutoScaler();
-        loadBalancer = new LoabBalancer();
-        System.out.println("[INFO] Complete.");
+        DynamoDB database = new DynamoDB();
+        AutoScaler autoScaler = new AutoScaler();
+        LoabBalancer loadBalancer = new LoabBalancer();
+        System.out.println("[INFO] Initialization complete.");
         System.out.println("[LB] Listening on " + loadBalancer.getAddress().toString());
 
+        /*
+         * Continuously have the auto scaler perform health checks
+         * on the whole system in order to scale up or down if necessary.
+         * It is also important to check if an instance is continuously failing
+         * to answer to requests - if so, it has to be terminated.
+         */
+        int printReport = 0;
         while(true) {
-            double systemLoad = autoScaler.getSystemPercentLoad();
-            System.out.printf("[INFO] System load: %.2f%%\n", systemLoad*100);
-            if(systemLoad > MAX_SYSTEM_LOAD) {
-                int amount = autoScaler.calculateAmountOfNeededInstances();
-                autoScaler.createInstances(amount);
-            }
-            else if(systemLoad < MIN_SYSTEM_LOAD && wsRequests.size() > MIN_INSTANCES) {
-                autoScaler.removeInstances();
-            }
             Thread.sleep(SYSTEM_HEALTH_CHECK_TIME * 1000);
+            autoScaler.performSystemHealthCheck();
+
+            if(printReport % 2 == 0) {
+                printSystemReport();
+            }
+            printReport++;
         }
     }
 }

@@ -66,7 +66,7 @@ public class LoabBalancer {
     private static String getTargetInstanceIP(double cost, String except) {
         // Determine supposed capacity of each instance if it were to run this request
         Map<String,Double> capacities = new HashMap<>();
-        for(String ip : Manager.wsRequests.keySet()) {
+        for(String ip : Manager.getAllInstancesIp()) {
             double capacity = Manager.getWSTotalLoad(ip);
             capacities.put(ip, capacity+cost);
         }

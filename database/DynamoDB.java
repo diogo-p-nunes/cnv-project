@@ -33,6 +33,7 @@ import manager.Manager;
 public class DynamoDB {
     private static AmazonDynamoDB dynamoDB;
     public static String TABLE_METRICS = "metrics";
+    private static double SPACE = 0.05;
 
     private static void init() {
         ProfileCredentialsProvider credentialsProvider = new ProfileCredentialsProvider();
@@ -122,32 +123,44 @@ public class DynamoDB {
     public static ScanResult getItems(String algorithm, long pixelsSearchArea, double distFromStartToEnd) {
 
         HashMap<String, Condition> scanFilter = new HashMap<String, Condition>();
+        ScanRequest scanRequest = null;
+        ScanResult scanResult = null;
+
+        // First check if there is an equal request exactly
+        String description = algorithm + "|" + pixelsSearchArea + "|" + distFromStartToEnd;
+        System.out.println("DESCRIPTION: " + description);
+        Condition eq_request = new Condition().withComparisonOperator(ComparisonOperator.EQ.toString())
+                                              .withAttributeValueList(new AttributeValue(description));
+        scanFilter.put("description", eq_request);
+        scanRequest = new ScanRequest(TABLE_METRICS).withScanFilter(scanFilter);
+        scanResult = dynamoDB.scan(scanRequest);
+        if(scanResult.getItems().size() != 0) {
+            System.out.println("[DB] Found exact same request.");
+            return scanResult;
+        }
 
         // Scan items with the same algorithm
+        System.out.println("[DB] Getting similar requests.");
+        scanFilter = new HashMap<String, Condition>();
         Condition eq_algorithm = new Condition().withComparisonOperator(ComparisonOperator.EQ.toString())
-                                             .withAttributeValueList(new AttributeValue(algorithm));
+                                                .withAttributeValueList(new AttributeValue(algorithm));
         scanFilter.put("algorithm", eq_algorithm);
 
-        //TODO: Find the best interval for "SIMILAR" values!
-        // Scan items with similar pixelsSearchArea
-        int interval = 0;
+        long interval = (long) SPACE * pixelsSearchArea;
         Condition sim_pixelsSearchArea = new Condition().withComparisonOperator(ComparisonOperator.BETWEEN.toString())
                     .withAttributeValueList(new AttributeValue().withN(Long.toString(pixelsSearchArea - interval)),
                                             new AttributeValue().withN(Long.toString(pixelsSearchArea + interval)));
         scanFilter.put("pixelsSearchArea", sim_pixelsSearchArea);
 
-
-        //TODO: Here as well!
-        // Scan items with similar distFromStartToEnd
-        interval = 0;
+        double interval_d = SPACE * distFromStartToEnd;
         Condition sim_distFromStartToEnd = new Condition().withComparisonOperator(ComparisonOperator.BETWEEN.toString())
-              .withAttributeValueList(new AttributeValue().withN(Double.toString(distFromStartToEnd - interval)),
-                                      new AttributeValue().withN(Double.toString(distFromStartToEnd + interval)));
+              .withAttributeValueList(new AttributeValue().withN(Double.toString(distFromStartToEnd - interval_d)),
+                                      new AttributeValue().withN(Double.toString(distFromStartToEnd + interval_d)));
         scanFilter.put("distFromStartToEnd", sim_distFromStartToEnd);
 
 
-        ScanRequest scanRequest = new ScanRequest(TABLE_METRICS).withScanFilter(scanFilter);
-        ScanResult scanResult = dynamoDB.scan(scanRequest);
+        scanRequest = new ScanRequest(TABLE_METRICS).withScanFilter(scanFilter);
+        scanResult = dynamoDB.scan(scanRequest);
         System.out.println("[DB] Query results: " + scanResult.toString());
         return scanResult;
     }

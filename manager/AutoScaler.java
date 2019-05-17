@@ -7,7 +7,7 @@ import java.util.*;
 
 @SuppressWarnings("Duplicates")
 public class AutoScaler {
-    private int INSTANCE_STARTUP_TIME = 30; //in seconds
+    private int INSTANCE_STARTUP_TIME = 30; //in seconds - grace period
 
     AutoScaler() throws Exception {
         initInstances();
@@ -31,8 +31,8 @@ public class AutoScaler {
                     Manager.addWS(instance.getPublicIpAddress(), instance.getInstanceId());
                 }
             }
-            if(Manager.wsRequests.size() < Manager.MIN_INSTANCES) {
-                createInstances(Manager.MIN_INSTANCES - Manager.wsRequests.size());
+            if(Manager.getNumberOfInstances() < Manager.MIN_INSTANCES) {
+                createInstances(Manager.MIN_INSTANCES - Manager.getNumberOfInstances());
             }
         }
         catch (AmazonServiceException ase) {
@@ -43,12 +43,11 @@ public class AutoScaler {
         }
     }
 
-    public void createInstances(int amount) throws Exception {
+    public void createInstances(int amount) throws InterruptedException {
         if(amount == 0) return;
-
         System.out.println("[AS] Starting " + amount + " new instance(s).");
-        RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
 
+        RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
         runInstancesRequest.withImageId("ami-0a24150cf40086795")
                 .withInstanceType("t2.micro")
                 .withMinCount(1)
@@ -57,29 +56,41 @@ public class AutoScaler {
                 .withSecurityGroups("CNV-ssh+http");
 
         RunInstancesResult runInstancesResult = Manager.ec2.runInstances(runInstancesRequest);
-        List<Instance> instances = runInstancesResult.getReservation().getInstances();
+        List<Instance> newInstances = runInstancesResult.getReservation().getInstances();
+        List<Instance> instances = null;
 
         boolean done_init = false;
         while(!done_init) {
+
             // Instances startup time
             Thread.sleep(INSTANCE_STARTUP_TIME * 1000);
+
+            // Request AWS for all instances states
+            DescribeInstancesResult describeInstancesRequest = Manager.ec2.describeInstances();
+            List<Reservation> reservations = describeInstancesRequest.getReservations();
+            instances = new ArrayList<>();
+            for (Reservation reservation : reservations) {
+                instances.addAll(reservation.getInstances());
+            }
+
+            // check if the newly created instance is running or not
             done_init = true;
             for( Instance instance : instances) {
-                System.out.print("[AS] Instance: " + instance.getInstanceId());
+                if(!newInstances.contains(instance)) continue;
                 if(instance.getState().getName().equals("running")) {
                     Manager.addWS(instance.getPublicIpAddress(), instance.getInstanceId());
+                    System.out.println("[AS] Instance: " + instance.getInstanceId() + " added and ready for LB");
                 }
                 else {
                     done_init = false;
+                    System.out.println("[AS] Instance: " + instance.getInstanceId() + " " + instance.getState().getName() + ".");
                 }
-                System.out.println(" " + instance.getState().getName() + ".");
             }
         }
-
         System.out.println("[AS] Done.");
     }
 
-    public void removeInstance(String instanceId) {
+    public void terminateInstance(String instanceId) {
         System.out.println("[AS] Terminating instance.");
         TerminateInstancesRequest termInstanceReq = new TerminateInstancesRequest();
         termInstanceReq.withInstanceIds(instanceId);
@@ -88,13 +99,13 @@ public class AutoScaler {
 
     public void removeInstances() {
         while (getSystemPercentLoad() < Manager.MIN_SYSTEM_LOAD
-                && Manager.wsRequests.size() > Manager.MIN_INSTANCES) {
+                && Manager.getNumberOfInstances() > Manager.MIN_INSTANCES) {
 
-            for(String ip : Manager.wsRequests.keySet()) {
+            for(String ip : Manager.getAllInstancesIp()) {
                 //if not running any request
-                if(Manager.wsRequests.get(ip).size() == 0) {
+                if(Manager.getInstanceNumberOfRunningRequests(ip) == 0) {
                     String id = Manager.removeWS(ip);
-                    removeInstance(id);
+                    terminateInstance(id);
                     break;
                 }
             }
@@ -103,13 +114,26 @@ public class AutoScaler {
 
     public double getSystemPercentLoad() {
         double totalLoad = Manager.getSystemTotalLoad();
-        double maxLoad = Manager.MAX_CAPACITY * Manager.wsRequests.size();
+        double maxLoad = Manager.MAX_CAPACITY * Manager.getNumberOfInstances();
         return totalLoad / maxLoad;
     }
 
     public int calculateAmountOfNeededInstances() {
         double totalLoad = Manager.getSystemTotalLoad();
-        double maxLoad = Manager.MAX_CAPACITY * Manager.wsRequests.size();
+        double maxLoad = Manager.MAX_CAPACITY * Manager.getNumberOfInstances();
         return (int) Math.ceil((totalLoad/Manager.MAX_SYSTEM_LOAD) - maxLoad);
+    }
+
+    public void performSystemHealthCheck() throws InterruptedException {
+        double systemLoad = getSystemPercentLoad();
+        System.out.printf("[INFO] System load: %.2f%%\n", systemLoad*100);
+        if(systemLoad > Manager.MAX_SYSTEM_LOAD) {
+            int amount = calculateAmountOfNeededInstances();
+            createInstances(amount);
+        }
+        else if(systemLoad < Manager.MIN_SYSTEM_LOAD
+                && Manager.getNumberOfInstances() > Manager.MIN_INSTANCES) {
+            removeInstances();
+        }
     }
 }

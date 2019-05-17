@@ -1,13 +1,17 @@
 package manager;
 
+import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import com.amazonaws.services.dynamodbv2.model.ScanResult;
 import database.DynamoDB;
+
+import java.util.Map;
 
 public class Request {
     public String algorithm;
     public long area;
     public double distance;
     public double cost;
-    static double MAX_METRIC_VALUE = 10000000;
+    static double MAX_METRIC_VALUE = 4000000;
 
     public Request(String algorithm, long area, double distance) {
         this.algorithm = algorithm;
@@ -22,21 +26,26 @@ public class Request {
         //TODO: Estimation of the cost of a given request
         // must be based on the metrics extracted - DYNAMO
 
-        /*ScanRequest scanResquet = DynamoDB.getItems(r.algorithm, r.area, r.distance);
+        /*
+         * Temos de pensar da seguinte forma:
+         *      - Max load de uma VM é 1 que é equivalente ao custo maximo
+         *        de um request.
+         *      - Entao significa que o request mais pesado (custo = 1) requer
+         *        uma VM só para ele!
+         */
+
+        ScanResult result = DynamoDB.getItems(r.algorithm, r.area, r.distance);
         double similarMetric = 0;
 
-        for (Map<String, AttributeValue> item : scanResquet.getItems()){
-            similarMetric += item.get("metricResult");
+        for (Map<String, AttributeValue> item : result.getItems()){
+            similarMetric += Double.parseDouble(item.get("metricResult").getN());
         }
-        similarMetric /= scanResquet.getItems().size();
+        similarMetric /= result.getItems().size();
 
-        double cost = similarMetric /= MAX_METRIC_VALUE;*/
+        double cost = similarMetric / MAX_METRIC_VALUE;
 
-
-
-        double cost = 0.3;
         r.cost = cost;
-
+        System.out.println("[REQUEST] " + r.toString() + " COST: " + cost);
         return cost;
     }
 
@@ -52,5 +61,10 @@ public class Request {
                    && other.distance == this.distance
                    && other.cost == this.cost;
         }
+    }
+
+    @Override
+    public String toString() {
+        return algorithm + "|" + area + "|" + distance;
     }
 }
