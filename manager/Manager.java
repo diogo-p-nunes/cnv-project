@@ -19,7 +19,6 @@ public class Manager {
     static int MIN_INSTANCES = 2;
     static double MAX_CAPACITY = 1;
     static double MAX_SYSTEM_LOAD = 0.8;
-    static double MIN_SYSTEM_LOAD = 0.4;
     private static int SYSTEM_HEALTH_CHECK_TIME = 30; //in seconds
     private static Map<String, RunningInstance> wsRequests = new ConcurrentHashMap<>();
 
@@ -106,12 +105,13 @@ public class Manager {
         // Print the system report - each instance state and running requests
         System.out.println();
         System.out.println("-----------------------------------------------------------------------------------------");
-        System.out.printf(" N-INSTANCES: %d\t\t   SYS-LOAD: %.2f%%\n",
+        System.out.println("\t\tSYSTEM REPORT");
+        System.out.println("-----------------------------------------------------------------------------------------");
+        System.out.printf(" n-instances: %d\t\t   sys-load: %.2f%%\n",
                 getNumberOfInstances(), getSystemTotalLoad()/getSystemMaxCapacity() * 100);
         System.out.println("-----------------------------------------------------------------------------------------");
         System.out.printf("%9s %26s %20s %10s %20s\n", "INSTANCE", "PUBLIC IP", "RUNNING REQS", "LOAD", "AVAILABILITY");
         System.out.println("-----------------------------------------------------------------------------------------");
-
         for(RunningInstance ws : wsRequests.values()) {
             System.out.format("%20s %19s %5d %21.2f%% %13.2f%%\n",
                     ws.getId(), ws.getIp(), ws.getRequests().size(), (ws.getTotalLoad()/1)*100, ws.getAvailability()*100);
@@ -131,7 +131,7 @@ public class Manager {
         DynamoDB database = new DynamoDB();
         autoScaler = new AutoScaler();
         LoabBalancer loadBalancer = new LoabBalancer();
-        System.out.println("[INFO] Initialization complete.");
+        System.out.println("[INFO] Initialization complete.\n");
         System.out.println("[LB] Listening on " + loadBalancer.getAddress().toString());
 
         /*
@@ -146,6 +146,7 @@ public class Manager {
             autoScaler.performSystemHealthCheck();
 
             if(printReport % 5 == 0) {
+                // Every 5 system health checks print the system report for logging purposes
                 printSystemReport();
             }
             printReport++;

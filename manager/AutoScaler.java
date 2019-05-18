@@ -115,24 +115,48 @@ public class AutoScaler {
     }
 
     public void performSystemHealthCheck() throws InterruptedException {
+        System.out.println("[AS] Performing System Health Check.");
+        boolean allGood = true;
+
+        // Terminate ill instances - PRIORITY
         for(RunningInstance i : Manager.getRunningInstances()) {
-            // Terminate ill instances - PRIORITY
             if(i.getHealthState().equals("unhealthy")) {
+                System.out.println("[AS] Instance " + i.getId() + " is rendered unhealthy - terminating it.");
                 terminateInstance(i.getId());
-            }
-            // Terminate unnecessary instances
-            else if(i.isUnnecessary()) {
-                terminateInstance(i.getId());
+                allGood = false;
             }
         }
 
         // CAREFUL - Terminating ill instances on the loop above
         // may lead to an apparent increase on system load!
         // Never let system get too much load
+        // SCALE UP
         double systemLoad = getSystemPercentLoad();
         if(systemLoad > Manager.MAX_SYSTEM_LOAD) {
+            System.out.println("[AS] Scaling up.");
             int amount = calculateAmountOfNeededInstances();
             createInstances(amount);
+            allGood = false;
+        }
+
+        // Terminate unnecessary instances - SCALE DOWN
+        // We want to maintain a minimum number of instances even if not being used
+        if(Manager.getNumberOfInstances() > Manager.MIN_INSTANCES) {
+            for(RunningInstance i : Manager.getRunningInstances()) {
+                // Terminate ill instances - PRIORITY
+                if(i.isUnnecessary()) {
+                    System.out.println("[AS] Scaling down.");
+                    terminateInstance(i.getId());
+                    allGood = false;
+                }
+            }
+        }
+
+        if(allGood) {
+            System.out.println("[AS] Sys Health Check terminated - all was good.");
+        }
+        else {
+            System.out.println("[AS] Sys Health Check terminated - repairments were done.");
         }
     }
 }
