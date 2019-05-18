@@ -15,12 +15,14 @@ import java.net.InetSocketAddress;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 
 @SuppressWarnings("Duplicates")
 public class LoabBalancer {
     private InetSocketAddress address;
+    private static List<Request> requestsCache = new ArrayList<>();
 
     public LoabBalancer() throws Exception {
         /*
@@ -85,6 +87,31 @@ public class LoabBalancer {
         return ip_max;
     }
 
+    public static boolean isRequestInCache(Request requestToLookFor) {
+        for(Request request : requestsCache) {
+            if (requestToLookFor.equals(request)){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static void addRequestToCache(Request requestToAdd) {
+        if (requestsCache.size() == 100) {
+            requestsCache.remove(0);
+        }
+        requestsCache.add(requestToAdd);
+    }
+
+    public static double getRequestCostFromCache(Request requestToLookFor) {
+        for(Request request : requestsCache) {
+            if (requestToLookFor.equals(request)){
+                return request.cost;
+            }
+        }
+        return 0;
+    }
+
     static class MyHandler implements HttpHandler {
         @Override
         public void handle(final HttpExchange t) {
@@ -94,7 +121,14 @@ public class LoabBalancer {
 
             // Estimate request cost
             Request request = parseArgs(query);
-            double cost = Request.requestCostEstimation(request);
+            double cost;
+            if (isRequestInCache(request)) {
+                cost = getRequestCostFromCache(request);
+            }
+            else {
+                cost = Request.requestCostEstimation(request);
+                addRequestToCache(request);
+            }
 
             // Get the target VM based on cost and workload
             String targetIP = getTargetInstanceIP(cost, "");
