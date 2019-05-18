@@ -11,7 +11,6 @@ public class Request {
     public long area;
     public double distance;
     public double cost;
-    static double MAX_METRIC_VALUE = 4000000;
 
     public Request(String algorithm, long area, double distance) {
         this.algorithm = algorithm;
@@ -24,14 +23,6 @@ public class Request {
 
     public static double requestCostEstimation(Request r) {
 
-        /*
-         * Temos de pensar da seguinte forma:
-         *      - Max load de uma VM é 1 que é equivalente ao custo maximo
-         *        de um request.
-         *      - Entao significa que o request mais pesado (custo = 1) requer
-         *        uma VM só para ele!
-         */
-
         ScanResult result = DynamoDB.getItems(r.algorithm, r.area, r.distance);
         double similarMetric = 0;
         double cost;
@@ -42,14 +33,20 @@ public class Request {
 
         if(result.getItems().size() != 0) {
             similarMetric /= result.getItems().size();
-            cost = similarMetric / MAX_METRIC_VALUE;
+            cost = similarMetric / Manager.MAX_METRIC_VALUE;
         }
         else {
             cost = 0.5;
         }
 
+        if(cost > 1) {
+            System.out.println("[REQUEST] Updated max metric.");
+            Manager.MAX_METRIC_VALUE = similarMetric / cost;
+            cost = 1;
+        }
+
         r.cost = cost;
-        System.out.println("[REQUEST] " + r.toString() + " - COST: " + cost);
+        //System.out.println("[REQUEST] " + r.toString() + " - COST: " + cost);
         return cost;
     }
 
@@ -62,8 +59,7 @@ public class Request {
             Request other = (Request) obj;
             return other.algorithm.equals(this.algorithm)
                    && other.area == this.area
-                   && other.distance == this.distance
-                   && other.cost == this.cost;
+                   && other.distance == this.distance;
         }
     }
 

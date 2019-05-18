@@ -9,7 +9,7 @@ public class Metric {
     
     public Metric(long tid) {
         this.tid = tid;
-        System.out.println("> [BIT]: Created metrics for thread: " + tid);
+        //System.out.println("> [BIT]: Created metrics for thread: " + tid);
     }
 
     public String toString() {
@@ -18,6 +18,6 @@ public class Metric {
 
     public void resetMetrics() {
         dyn_new_count = 0;
-        System.out.println("> [BIT]: Reset metrics for thread: " + this.tid);
+        //System.out.println("> [BIT]: Reset metrics for thread: " + this.tid);
     }
 }

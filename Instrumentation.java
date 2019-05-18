@@ -42,7 +42,7 @@ public class Instrumentation {
             
             // write the metrics to the file in a new line
             outputMetrics.write(request + "=" + metric.toString());
-            System.out.println("> [BIT]: Stored metrics (of T" + Thread.currentThread().getId() + ") in: " + cnvProject + "/" + metricsOutputFile);
+            //System.out.println("> [BIT]: Stored metrics (of T" + Thread.currentThread().getId() + ") in: " + cnvProject + "/" + metricsOutputFile);
 
             // reset the metrics for the next thread request
             metric.resetMetrics();

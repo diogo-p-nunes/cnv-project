@@ -7,7 +7,7 @@ import java.util.*;
 
 @SuppressWarnings("Duplicates")
 public class AutoScaler {
-    private int INSTANCE_STARTUP_TIME = 30; //in seconds - grace period
+    private int INSTANCE_STARTUP_TIME = 60; //in seconds - grace period
 
     AutoScaler() throws Exception {
         initInstances();
@@ -28,6 +28,7 @@ public class AutoScaler {
             // Populate map of IP-List<Request> with each running instance
             for(Instance instance : instances) {
                 if(instance.getState().getName().equals("running")) {
+                    if(instance.getPublicIpAddress().equals(Manager.getLoadBalancerIp())) continue;
                     Manager.addWS(instance.getPublicIpAddress(), instance.getInstanceId());
                 }
             }
@@ -49,7 +50,7 @@ public class AutoScaler {
         System.out.println("[AS] Starting " + amount + " new instance(s).");
 
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
-        runInstancesRequest.withImageId("ami-0a24150cf40086795")
+        runInstancesRequest.withImageId("ami-05ef107833e56a8e4")
                 .withInstanceType("t2.micro")
                 .withMinCount(1)
                 .withMaxCount(amount)
@@ -105,7 +106,7 @@ public class AutoScaler {
         Manager.ec2.terminateInstances(termInstanceReq);
     }
 
-    public double getSystemPercentLoad() {
+    public double getSystemLoad() {
         double totalLoad = Manager.getSystemTotalLoad();
         double maxLoad = Manager.MAX_CAPACITY * Manager.getNumberOfInstances();
         return totalLoad / maxLoad;
@@ -125,6 +126,7 @@ public class AutoScaler {
         for(RunningInstance i : Manager.getRunningInstances()) {
             if(i.getHealthState().equals("unhealthy")) {
                 System.out.println("[AS] Instance " + i.getId() + " is rendered unhealthy - terminating it.");
+                Manager.removeWS(i.getIp());
                 terminateInstance(i.getId());
                 allGood = false;
             }
@@ -134,7 +136,7 @@ public class AutoScaler {
         // may lead to an apparent increase on system load!
         // Never let system get too much load
         // SCALE UP
-        double systemLoad = getSystemPercentLoad();
+        double systemLoad = getSystemLoad();
         if(systemLoad > Manager.MAX_SYSTEM_LOAD) {
             System.out.println("[AS] Scaling up.");
             int amount = calculateAmountOfNeededInstances();
@@ -144,15 +146,25 @@ public class AutoScaler {
 
         // Terminate unnecessary instances - SCALE DOWN
         // We want to maintain a minimum number of instances even if not being used
-        if(Manager.getNumberOfInstances() > Manager.MIN_INSTANCES) {
-            for(RunningInstance i : Manager.getRunningInstances()) {
-                // Terminate ill instances - PRIORITY
-                if(i.isUnnecessary()) {
+        // We dont want to scale down if scaling down would increase sys load > MAX
+
+        for(RunningInstance i : Manager.getRunningInstances()) {
+            if(Manager.getNumberOfInstances() > Manager.MIN_INSTANCES) {
+                // Load of the system if we were to terminate this supposedly unnecessary instance
+                double causedLoad = Manager.getSystemTotalLoad() / (Manager.getSystemMaxCapacity() - Manager.MAX_CAPACITY);
+
+                if(i.isUnnecessary() && causedLoad <= Manager.MAX_SYSTEM_LOAD) {
                     System.out.println("[AS] Scaling down.");
+                    Manager.removeWS(i.getIp());
                     terminateInstance(i.getId());
                     allGood = false;
                 }
             }
+        }
+
+        if(Manager.getNumberOfInstances() < Manager.MIN_INSTANCES) {
+            System.out.println("[AS] Scaling up.");
+            createInstances(Manager.MIN_INSTANCES - Manager.getNumberOfInstances());
         }
 
         if(allGood) {

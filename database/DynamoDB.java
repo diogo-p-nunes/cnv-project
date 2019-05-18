@@ -36,10 +36,9 @@ public class DynamoDB {
             credentialsProvider.getCredentials();
         } catch (Exception e) {
             throw new AmazonClientException(
-                    "Cannot load the credentials from the credential profiles file. " +
-                            "Please make sure that your credentials file is at the correct " +
-                            "location (~/.aws/credentials), and is in valid format.",
-                    e);
+                    "Cannot load the credentials from the credential profiles file. "
+                    + "Please make sure that your credentials file is at the correct "
+                    + "location (~/.aws/credentials), and is in valid format.", e);
         }
         dynamoDB = AmazonDynamoDBClientBuilder.standard()
                 .withCredentials(credentialsProvider)
@@ -111,7 +110,7 @@ public class DynamoDB {
         String description = algorithm + "|" + pixelsSearchArea + "|" + distFromStartToEnd;
         Map<String, AttributeValue> item = newItem(description, algorithm, pixelsSearchArea, distFromStartToEnd, metricResult);
         PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
-        PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
+        dynamoDB.putItem(putItemRequest);
         System.out.println("[DB] Added entry: " + item.toString());
     }
 

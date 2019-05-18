@@ -23,12 +23,13 @@ import java.util.concurrent.Executors;
 public class LoabBalancer {
     private InetSocketAddress address;
     private static List<Request> requestsCache = new ArrayList<>();
+    public static int REQUEST_TIMEOUT = 60;
 
     public LoabBalancer() throws Exception {
         /*
          * Start listening for requests to redirect
          */
-        final HttpServer server = HttpServer.create(new InetSocketAddress(80), 0);
+        final HttpServer server = HttpServer.create(new InetSocketAddress(8000), 0);
         server.createContext("/climb", new MyHandler());
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
@@ -66,21 +67,33 @@ public class LoabBalancer {
     }
 
     private static String getTargetInstanceIP(double cost, String except) {
-        // Determine supposed load of each instance if it were to run this request
-        Map<String,Double> loads = new HashMap<>();
-        for(String ip : Manager.getAllInstancesIp()) {
-            double load = Manager.getWSTotalLoad(ip);
-            loads.put(ip, load + cost);
-        }
+        double max = 0;
+        String ip_max = "";
 
-        // Return the instance that maximizes the load without going over the limit
-        double max = loads.values().iterator().next();
-        String ip_max = loads.keySet().iterator().next();
-        for(String ip : loads.keySet()) {
-            double cap = loads.get(ip);
-            if(cap <= Manager.MAX_CAPACITY && cap >= max && !ip.equals(except)) {
-                max = cap;
-                ip_max = ip;
+        while(ip_max.equals("")) {
+            // Determine supposed load of each instance if it were to run this request
+            Map<String,Double> loads = new HashMap<>();
+            for(String ip : Manager.getAllInstancesIp()) {
+                double load = Manager.getWSTotalLoad(ip);
+                loads.put(ip, load + cost);
+            }
+
+            // Return the instance that maximizes the load without going over the limit
+            for (String ip : loads.keySet()) {
+                double load = loads.get(ip);
+                if (load <= Manager.MAX_CAPACITY && load >= max && !ip.equals(except)) {
+                    max = load;
+                    ip_max = ip;
+                }
+            }
+
+            // sleep for a while when there is no available IP
+            if(ip_max.equals("")) {
+                try {
+                    Thread.sleep(30 * 1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
             }
         }
 
@@ -89,7 +102,7 @@ public class LoabBalancer {
 
     public static boolean isRequestInCache(Request requestToLookFor) {
         for(Request request : requestsCache) {
-            if (requestToLookFor.equals(request)){
+            if (request.equals(requestToLookFor)){
                 return true;
             }
         }
@@ -124,10 +137,13 @@ public class LoabBalancer {
             double cost;
             if (isRequestInCache(request)) {
                 cost = getRequestCostFromCache(request);
+                request.cost = cost;
+                System.out.println("[LB] Request cost from cache - COST: " + cost);
             }
             else {
                 cost = Request.requestCostEstimation(request);
                 addRequestToCache(request);
+                System.out.println("[LB] Request cost from DB - COST: " + cost);
             }
 
             // Get the target VM based on cost and workload
@@ -138,7 +154,8 @@ public class LoabBalancer {
 
             while(!done) {
                 try {
-                    if (failedAttemptsToGetRequestResponse == Manager.getNumberOfInstances()) {
+                    if (failedAttemptsToGetRequestResponse == 3 * Manager.getNumberOfInstances()) {
+                        System.out.println("[LB] Requesting urgent instance launch.");
                         targetIP = Manager.urgentInstanceLaunch();
                     }
                     // Send data
@@ -146,6 +163,7 @@ public class LoabBalancer {
                     URL url = new URL(forwardQuery);
                     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                     conn.setDoOutput(true);
+                    conn.setConnectTimeout(REQUEST_TIMEOUT * 1000);
                     System.out.println("[LB] Forwarded to " + targetIP);
 
                     // Keep tabs on who is running which request for AutoScaling algorithm

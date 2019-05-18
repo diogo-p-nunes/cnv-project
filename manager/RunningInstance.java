@@ -98,7 +98,9 @@ public class RunningInstance {
             return true;
         }
         else {
-            consecutiveTimesUnnecessary++;
+            if(requests.size() == 0) {
+                consecutiveTimesUnnecessary++;
+            }
             return false;
         }
     }

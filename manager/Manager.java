@@ -9,17 +9,21 @@ import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
+import com.amazonaws.util.EC2MetadataUtils;
 import database.DynamoDB;
 
 @SuppressWarnings("Duplicates")
 public class Manager {
     static AmazonEC2 ec2;
     private static AutoScaler autoScaler;
+    private static LoabBalancer loadBalancer;
+    private static String ip_loadbalancer = "";
     public static String REGION = "us-east-1";
     static int MIN_INSTANCES = 2;
     static double MAX_CAPACITY = 1;
     static double MAX_SYSTEM_LOAD = 0.8;
     private static int SYSTEM_HEALTH_CHECK_TIME = 30; //in seconds
+    public static double MAX_METRIC_VALUE = 8384521;
     private static Map<String, RunningInstance> wsRequests = new ConcurrentHashMap<>();
 
     private static void init() throws AmazonClientException {
@@ -38,6 +42,13 @@ public class Manager {
                                     .withRegion(REGION)
                                     .withCredentials(new AWSStaticCredentialsProvider(credentials))
                                     .build();
+    }
+
+    public static String getLoadBalancerIp() {
+        if(ip_loadbalancer.equals("")) {
+            ip_loadbalancer = EC2MetadataUtils.getData("/latest/meta-data/public-ipv4");
+        }
+        return ip_loadbalancer;
     }
 
     public static synchronized void addWSRequest(String ip, Request r) {
@@ -105,9 +116,9 @@ public class Manager {
         // Print the system report - each instance state and running requests
         System.out.println();
         System.out.println("-----------------------------------------------------------------------------------------");
-        System.out.println("\t\tSYSTEM REPORT");
+        System.out.println("\t\t\t\t\tSYSTEM REPORT");
         System.out.println("-----------------------------------------------------------------------------------------");
-        System.out.printf(" n-instances: %d\t\t   sys-load: %.2f%%\n",
+        System.out.printf("\t\t\tn-instances: %d\t\t   sys-load: %.2f%%\n",
                 getNumberOfInstances(), getSystemTotalLoad()/getSystemMaxCapacity() * 100);
         System.out.println("-----------------------------------------------------------------------------------------");
         System.out.printf("%9s %26s %20s %10s %20s\n", "INSTANCE", "PUBLIC IP", "RUNNING REQS", "LOAD", "AVAILABILITY");
@@ -126,13 +137,13 @@ public class Manager {
          * Only then is it ready to accept requests.
          */
 
-        System.out.println("[INFO] DB, LB and AS initialization ... ");
+        System.out.println("[INFO] DB, AS and LB initialization ... ");
         init();
         DynamoDB database = new DynamoDB();
         autoScaler = new AutoScaler();
-        LoabBalancer loadBalancer = new LoabBalancer();
+        loadBalancer = new LoabBalancer();
         System.out.println("[INFO] Initialization complete.\n");
-        System.out.println("[LB] Listening on " + loadBalancer.getAddress().toString());
+        System.out.println("[LB] Listening on " + getLoadBalancerIp());
 
         /*
          * Continuously have the auto scaler perform health checks
@@ -145,8 +156,8 @@ public class Manager {
             Thread.sleep(SYSTEM_HEALTH_CHECK_TIME * 1000);
             autoScaler.performSystemHealthCheck();
 
-            if(printReport % 5 == 0) {
-                // Every 5 system health checks print the system report for logging purposes
+            // Every 5 system health checks print the system report for logging purposes
+            if(printReport % 1 == 0) {
                 printSystemReport();
             }
             printReport++;
