@@ -43,8 +43,9 @@ public class AutoScaler {
         }
     }
 
-    public void createInstances(int amount) throws InterruptedException {
-        if(amount == 0) return;
+    public List<String> createInstances(int amount) throws InterruptedException {
+        List<String> newIps = new ArrayList<>();
+        if(amount == 0) return new ArrayList<>();
         System.out.println("[AS] Starting " + amount + " new instance(s).");
 
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
@@ -84,6 +85,7 @@ public class AutoScaler {
                 }
                 if(isNewInstance && instance.getState().getName().equals("running")) {
                     Manager.addWS(instance.getPublicIpAddress(), instance.getInstanceId());
+                    newIps.add(instance.getPublicIpAddress());
                     System.out.println("[AS] Instance: " + instance.getInstanceId() + " is ready.");
                 }
                 else if (isNewInstance){
@@ -93,6 +95,7 @@ public class AutoScaler {
             }
         }
         System.out.println("[AS] Done.");
+        return newIps;
     }
 
     public void terminateInstance(String instanceId) {
@@ -158,5 +161,9 @@ public class AutoScaler {
         else {
             System.out.println("[AS] Sys Health Check terminated - repairments were done.");
         }
+    }
+
+    public String urgentInstanceLaunch() throws InterruptedException {
+        return createInstances(1).get(0);
     }
 }

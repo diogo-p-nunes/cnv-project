@@ -64,18 +64,18 @@ public class LoabBalancer {
     }
 
     private static String getTargetInstanceIP(double cost, String except) {
-        // Determine supposed capacity of each instance if it were to run this request
-        Map<String,Double> capacities = new HashMap<>();
+        // Determine supposed load of each instance if it were to run this request
+        Map<String,Double> loads = new HashMap<>();
         for(String ip : Manager.getAllInstancesIp()) {
-            double capacity = Manager.getWSTotalLoad(ip);
-            capacities.put(ip, capacity+cost);
+            double load = Manager.getWSTotalLoad(ip);
+            loads.put(ip, load + cost);
         }
 
-        // Return the instance that maximizes the capacity without going over the limit
-        double max = capacities.values().iterator().next();
-        String ip_max = capacities.keySet().iterator().next();
-        for(String ip : capacities.keySet()) {
-            double cap = capacities.get(ip);
+        // Return the instance that maximizes the load without going over the limit
+        double max = loads.values().iterator().next();
+        String ip_max = loads.keySet().iterator().next();
+        for(String ip : loads.keySet()) {
+            double cap = loads.get(ip);
             if(cap <= Manager.MAX_CAPACITY && cap >= max && !ip.equals(except)) {
                 max = cap;
                 ip_max = ip;
@@ -100,8 +100,13 @@ public class LoabBalancer {
             String targetIP = getTargetInstanceIP(cost, "");
             boolean done = false;
 
+            int failedAttemptsToGetRequestResponse = 0;
+
             while(!done) {
                 try {
+                    if (failedAttemptsToGetRequestResponse == Manager.getNumberOfInstances()) {
+                        targetIP = Manager.urgentInstanceLaunch();
+                    }
                     // Send data
                     String forwardQuery = "http://" + targetIP + ":8000/climb?" + query;
                     URL url = new URL(forwardQuery);
@@ -157,6 +162,7 @@ public class LoabBalancer {
 
                     // Get the target VM based on cost and workload except the one that failed
                     targetIP = getTargetInstanceIP(cost, targetIP);
+                    failedAttemptsToGetRequestResponse += 1;
                 }
             }
         }

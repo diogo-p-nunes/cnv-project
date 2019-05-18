@@ -45,7 +45,7 @@ public class Request {
             cost = similarMetric / MAX_METRIC_VALUE;
         }
         else {
-            cost = 0.3;
+            cost = 0.5;
         }
 
         r.cost = cost;

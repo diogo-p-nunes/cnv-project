@@ -152,4 +152,8 @@ public class Manager {
             printReport++;
         }
     }
+
+    public static String urgentInstanceLaunch() throws InterruptedException {
+        return autoScaler.urgentInstanceLaunch();
+    }
 }
