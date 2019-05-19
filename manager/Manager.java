@@ -45,9 +45,12 @@ public class Manager {
     }
 
     public static String getLoadBalancerIp() {
+        //ip_loadbalancer = "127.0.0.1";
+
         if(ip_loadbalancer.equals("")) {
             ip_loadbalancer = EC2MetadataUtils.getData("/latest/meta-data/public-ipv4");
         }
+
         return ip_loadbalancer;
     }
 
@@ -74,10 +77,8 @@ public class Manager {
         wsRequests.put(ip, new RunningInstance(ip, id));
     }
 
-    public static synchronized String removeWS(String ip) {
-        String id = wsRequests.get(ip).getId();
+    public static synchronized void removeWS(String ip) {
         wsRequests.remove(ip);
-        return id;
     }
 
     public static Collection<RunningInstance> getRunningInstances() {
@@ -164,7 +165,12 @@ public class Manager {
         }
     }
 
-    public static String urgentInstanceLaunch() throws InterruptedException {
-        return autoScaler.urgentInstanceLaunch();
+    public static String urgentInstanceLaunch() {
+        try {
+            return autoScaler.urgentInstanceLaunch();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 }

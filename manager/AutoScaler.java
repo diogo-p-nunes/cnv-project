@@ -8,6 +8,7 @@ import java.util.*;
 @SuppressWarnings("Duplicates")
 public class AutoScaler {
     private int INSTANCE_STARTUP_TIME = 60; //in seconds - grace period
+    private boolean performingUrgentScaleUp = false;
 
     AutoScaler() throws Exception {
         initInstances();
@@ -95,12 +96,13 @@ public class AutoScaler {
                 }
             }
         }
+        performingUrgentScaleUp = false;
         System.out.println("[AS] Done.");
         return newIps;
     }
 
     public void terminateInstance(String instanceId) {
-        System.out.println("[AS] Terminating instance.");
+        System.out.println("[AS] Terminating instance " + instanceId);
         TerminateInstancesRequest termInstanceReq = new TerminateInstancesRequest();
         termInstanceReq.withInstanceIds(instanceId);
         Manager.ec2.terminateInstances(termInstanceReq);
@@ -132,39 +134,42 @@ public class AutoScaler {
             }
         }
 
-        // CAREFUL - Terminating ill instances on the loop above
-        // may lead to an apparent increase on system load!
-        // Never let system get too much load
-        // SCALE UP
-        double systemLoad = getSystemLoad();
-        if(systemLoad > Manager.MAX_SYSTEM_LOAD) {
-            System.out.println("[AS] Scaling up.");
-            int amount = calculateAmountOfNeededInstances();
-            createInstances(amount);
-            allGood = false;
-        }
+        if(!performingUrgentScaleUp) {
 
-        // Terminate unnecessary instances - SCALE DOWN
-        // We want to maintain a minimum number of instances even if not being used
-        // We dont want to scale down if scaling down would increase sys load > MAX
+            // CAREFUL - Terminating ill instances on the loop above
+            // may lead to an apparent increase on system load!
+            // Never let system get too much load
+            // SCALE UP
+            double systemLoad = getSystemLoad();
+            if (systemLoad > Manager.MAX_SYSTEM_LOAD) {
+                System.out.println("[AS] Scaling up due to MAX_SYSTEM_LOAD breach.");
+                int amount = calculateAmountOfNeededInstances();
+                createInstances(amount);
+                allGood = false;
+            }
 
-        for(RunningInstance i : Manager.getRunningInstances()) {
-            if(Manager.getNumberOfInstances() > Manager.MIN_INSTANCES) {
-                // Load of the system if we were to terminate this supposedly unnecessary instance
-                double causedLoad = Manager.getSystemTotalLoad() / (Manager.getSystemMaxCapacity() - Manager.MAX_CAPACITY);
+            // Terminate unnecessary instances - SCALE DOWN
+            // We want to maintain a minimum number of instances even if not being used
+            // We dont want to scale down if scaling down would make sys_load > MAX
+            for (RunningInstance i : Manager.getRunningInstances()) {
+                if (Manager.getNumberOfInstances() > Manager.MIN_INSTANCES) {
+                    // Load of the system if we were to terminate this supposedly unnecessary instance
+                    double causedLoad = Manager.getSystemTotalLoad() / (Manager.getSystemMaxCapacity() - Manager.MAX_CAPACITY);
 
-                if(i.isUnnecessary() && causedLoad <= Manager.MAX_SYSTEM_LOAD) {
-                    System.out.println("[AS] Scaling down.");
-                    Manager.removeWS(i.getIp());
-                    terminateInstance(i.getId());
-                    allGood = false;
+                    if (i.isUnnecessary() && causedLoad <= (Manager.MAX_SYSTEM_LOAD - 0.10)) {
+                        System.out.println("[AS] Scaling down due to un-necessity.");
+                        Manager.removeWS(i.getIp());
+                        terminateInstance(i.getId());
+                        allGood = false;
+                    }
                 }
             }
-        }
 
-        if(Manager.getNumberOfInstances() < Manager.MIN_INSTANCES) {
-            System.out.println("[AS] Scaling up.");
-            createInstances(Manager.MIN_INSTANCES - Manager.getNumberOfInstances());
+            if (Manager.getNumberOfInstances() < Manager.MIN_INSTANCES) {
+                System.out.println("[AS] Scaling up due to MIN_INSTANCES breach.");
+                createInstances(Manager.MIN_INSTANCES - Manager.getNumberOfInstances());
+            }
+
         }
 
         if(allGood) {
@@ -176,6 +181,7 @@ public class AutoScaler {
     }
 
     public String urgentInstanceLaunch() throws InterruptedException {
+        performingUrgentScaleUp = true;
         return createInstances(1).get(0);
     }
 }

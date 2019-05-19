@@ -35,6 +35,7 @@ public class RunningInstance {
 
     public void addRequest(Request r) {
         requests.add(r);
+        consecutiveTimesUnnecessary = 0;
     }
 
     public void incrementFailedRequests() {
@@ -100,6 +101,9 @@ public class RunningInstance {
         else {
             if(requests.size() == 0) {
                 consecutiveTimesUnnecessary++;
+            }
+            else {
+                consecutiveTimesUnnecessary = 0;
             }
             return false;
         }

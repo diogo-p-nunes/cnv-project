@@ -6,10 +6,7 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import pt.ulisboa.tecnico.cnv.solver.SolverArgumentParser;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URL;
@@ -23,7 +20,8 @@ import java.util.concurrent.Executors;
 public class LoabBalancer {
     private InetSocketAddress address;
     private static List<Request> requestsCache = new ArrayList<>();
-    public static int REQUEST_TIMEOUT = 60;
+    public static int REQUEST_TIMEOUT = 90;
+    private static boolean requestedUrgentInstance = false;
 
     public LoabBalancer() throws Exception {
         /*
@@ -70,31 +68,41 @@ public class LoabBalancer {
         double max = 0;
         String ip_max = "";
 
-        while(ip_max.equals("")) {
-            // Determine supposed load of each instance if it were to run this request
-            Map<String,Double> loads = new HashMap<>();
-            for(String ip : Manager.getAllInstancesIp()) {
-                double load = Manager.getWSTotalLoad(ip);
-                loads.put(ip, load + cost);
-            }
+        // Determine supposed load of each instance if it were to run this request
+        Map<String,Double> loads = new HashMap<>();
+        for(String ip : Manager.getAllInstancesIp()) {
+            double load = Manager.getWSTotalLoad(ip);
+            loads.put(ip, load + cost);
+        }
 
-            // Return the instance that maximizes the load without going over the limit
-            for (String ip : loads.keySet()) {
-                double load = loads.get(ip);
-                if (load <= Manager.MAX_CAPACITY && load >= max && !ip.equals(except)) {
-                    max = load;
-                    ip_max = ip;
-                }
+        // Return the instance that maximizes the load without going over the limit
+        for (String ip : loads.keySet()) {
+            double load = loads.get(ip);
+            if (load <= Manager.MAX_CAPACITY && load >= max && !ip.equals(except)) {
+                max = load;
+                ip_max = ip;
             }
+        }
 
-            // sleep for a while when there is no available IP
-            if(ip_max.equals("")) {
-                try {
-                    Thread.sleep(30 * 1000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+        // in case all VM's available cannot handle the load of the incoming request
+        // ask AS for URGENT instance
+        if(ip_max.equals("") && !requestedUrgentInstance) {
+            System.out.println("[LB] No VM can handle the request.");
+            System.out.println("[LB] Requesting urgent instance launch.");
+            requestedUrgentInstance = true;
+            ip_max = Manager.urgentInstanceLaunch();
+            requestedUrgentInstance = false;
+
+        }
+        // if already asked for an urgent instance just wait until it is available
+        // and it can handle the incoming request cost
+        else if(requestedUrgentInstance) {
+            try {
+                Thread.sleep(30 * 1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
+            ip_max = getTargetInstanceIP(cost, except);
         }
 
         return ip_max;
@@ -127,7 +135,7 @@ public class LoabBalancer {
 
     static class MyHandler implements HttpHandler {
         @Override
-        public void handle(final HttpExchange t) {
+        public void handle(final HttpExchange t) throws IOException {
             // Get the query.
             final String query = t.getRequestURI().getQuery();
             System.out.println("\n[LB] FROM: " + t.getRemoteAddress().toString() + " QUERY: " + query);
@@ -152,16 +160,26 @@ public class LoabBalancer {
 
             int failedAttemptsToGetRequestResponse = 0;
 
+            // Init connection variables
+            InputStream in = null;
+            BufferedReader reader = null;
+            OutputStream lbos = null;
+            HttpURLConnection conn = null;
+
             while(!done) {
+
                 try {
+                    // In case all VMS are failing multiple times - URGENT request to AS
                     if (failedAttemptsToGetRequestResponse == 3 * Manager.getNumberOfInstances()) {
+                        System.out.println("[LB] No VM is correctly answering.");
                         System.out.println("[LB] Requesting urgent instance launch.");
                         targetIP = Manager.urgentInstanceLaunch();
                     }
+
                     // Send data
                     String forwardQuery = "http://" + targetIP + ":8000/climb?" + query;
                     URL url = new URL(forwardQuery);
-                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn = (HttpURLConnection) url.openConnection();
                     conn.setDoOutput(true);
                     conn.setConnectTimeout(REQUEST_TIMEOUT * 1000);
                     System.out.println("[LB] Forwarded to " + targetIP);
@@ -184,11 +202,11 @@ public class LoabBalancer {
                         hdrs.add("Access-Control-Allow-Headers", "Origin, Accept, X-Requested-With, " +
                                     "Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers");
 
-                        InputStream in  = conn.getInputStream();
-                        BufferedReader reader = new BufferedReader(new InputStreamReader(in));
-                        final OutputStream lbos = t.getResponseBody();
+                        in  = conn.getInputStream();
+                        reader = new BufferedReader(new InputStreamReader(in));
+                        lbos = t.getResponseBody();
 
-                        byte[] b = new byte[2048];
+                        byte[] b = new byte[1024];
                         int length;
                         while ((length = in.read(b)) != -1) {
                             lbos.write(b, 0, length);
@@ -199,6 +217,7 @@ public class LoabBalancer {
                         reader.close();
 
                         System.out.println("[LB] Sent response back to " + t.getRemoteAddress().toString() + "\n");
+                        conn.disconnect();
 
                         // This VM has finished this request
                         Manager.removeSuccessfulWSRequest(targetIP, request);
@@ -206,6 +225,7 @@ public class LoabBalancer {
                     }
                 }
                 catch (Exception e) {
+
                     System.out.println("[LB] Instance at " + targetIP + " failed.");
                     System.out.println("[LB] Trying with different WebServer.");
 
@@ -215,6 +235,20 @@ public class LoabBalancer {
                     // Get the target VM based on cost and workload except the one that failed
                     targetIP = getTargetInstanceIP(cost, targetIP);
                     failedAttemptsToGetRequestResponse += 1;
+                }
+                finally {
+                    if(in != null) {
+                        in.close();
+                    }
+                    if(lbos != null) {
+                        lbos.close();
+                    }
+                    if(reader != null) {
+                        reader.close();
+                    }
+                    if(conn != null) {
+                        conn.disconnect();
+                    }
                 }
             }
         }
